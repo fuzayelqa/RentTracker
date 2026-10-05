@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Modern House Roof -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M54,26 L28,47 L33,51 L54,34 L75,51 L80,47 Z" />
+
+    <!-- House Body -->
+    <path
+        android:fillColor="#E2E8F0"
+        android:pathData="M34,49 L34,76 C34,78.2 35.8,80 38,80 L52,80 L52,65 C52,62.8 53.8,61 56,61 L62,61 C64.2,61 66,62.8 66,65 L66,80 L70,80 C72.2,80 74,78.2 74,76 L74,49 L54,33 Z" />
+
+    <!-- Modern Chimney -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M67,32 L67,42 L73,47 L73,32 Z" />
+
+    <!-- Door -->
+    <path
+        android:fillColor="#0F5132"
+        android:pathData="M52,65 C52,62.8 53.8,61 56,61 L62,61 C64.2,61 66,62.8 66,65 L66,80 L52,80 Z" />
+
+    <!-- Accent Currency / Checkmark Badge -->
+    <path
+        android:fillColor="#F59E0B"
+        android:pathData="M70,68m-14,0a14,14 0 1,0 28,0a14,14 0 1,0 -28,0" />
+
+    <!-- Checkmark inside badge -->
+    <path
+        android:fillColor="#0A2A1E"
+        android:pathData="M65.5,68.2 L68.8,71.5 L75.2,64.5 L76.8,66.1 L68.8,74.5 L64,69.7 Z" />
+</vector>

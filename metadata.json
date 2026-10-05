@@ -1,0 +1,6 @@
+{
+  "name": "RentTracker",
+  "description": "Home rent management and payment tracking app with Firestore synchronization, payment ledger, and reminders",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
