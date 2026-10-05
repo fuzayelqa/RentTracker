@@ -163,8 +163,8 @@ fun ReportsScreen(
                         title = "Total Rent Due",
                         value = CurrencyUtils.format(totalDue, defaultCurrency),
                         icon = Icons.Default.Assessment,
-                        iconBgColor = Color(0xFFEFF6FF),
-                        iconTintColor = Color(0xFF2563EB),
+                        iconBgColor = Color(0xFFF3E8FF),
+                        iconTintColor = Color(0xFF7E22CE),
                         modifier = Modifier.weight(1f)
                     )
                     SummaryStatCard(

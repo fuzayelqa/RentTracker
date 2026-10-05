@@ -40,6 +40,12 @@ data class RentMonthWithProperty(
 )
 
 data class UiState(
+    val isAuthenticated: Boolean = false,
+    val authLoading: Boolean = false,
+    val authError: String? = null,
+    val currentUserId: String = "",
+    val currentUserEmail: String = "",
+    val currentUserName: String = "",
     val isAppLocked: Boolean = false,
     val pinError: String? = null,
     val searchQuery: String = "",
@@ -57,6 +63,7 @@ class RentTrackerViewModel(application: Application) : AndroidViewModel(applicat
 
     private val repository: RentTrackerRepository
     val syncManager = com.example.data.firebase.FirebaseSyncManager()
+    val authManager = com.example.data.firebase.AuthManager()
 
     val properties: StateFlow<List<PropertyEntity>>
     val rentMonths: StateFlow<List<RentMonthEntity>>
@@ -94,6 +101,17 @@ class RentTrackerViewModel(application: Application) : AndroidViewModel(applicat
         userSettings = repository.userSettings.map { it ?: UserSettingsEntity() }.stateIn(
             viewModelScope, SharingStarted.WhileSubscribed(5000), UserSettingsEntity()
         )
+
+        // Check existing authenticated user
+        val existingUser = authManager.currentUser
+        if (existingUser != null) {
+            _uiState.value = _uiState.value.copy(
+                isAuthenticated = true,
+                currentUserId = existingUser.uid,
+                currentUserEmail = existingUser.email.orEmpty(),
+                currentUserName = existingUser.displayName ?: "Tenant"
+            )
+        }
 
         // Initial check for lock and ensure current month exists
         viewModelScope.launch {
@@ -363,6 +381,130 @@ class RentTrackerViewModel(application: Application) : AndroidViewModel(applicat
                     infoMessage = "Sync completed with offline cache: $err"
                 )
             }
+        }
+    }
+
+    fun signUpWithAccount(name: String, email: String, pass: String, currency: String) {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(authLoading = true, authError = null)
+            val result = authManager.signUp(name, email, pass)
+            if (result.isSuccess) {
+                val user = result.getOrNull()
+                val uid = user?.uid ?: java.util.UUID.randomUUID().toString()
+                _uiState.value = _uiState.value.copy(
+                    isAuthenticated = true,
+                    authLoading = false,
+                    currentUserId = uid,
+                    currentUserEmail = email,
+                    currentUserName = name,
+                    infoMessage = "Account created! Welcome, $name."
+                )
+                val currentSettings = userSettings.value
+                updateUserSettings(
+                    currentSettings.copy(
+                        userId = uid,
+                        tenantName = name,
+                        email = email,
+                        defaultCurrency = currency
+                    )
+                )
+            } else {
+                val err = result.exceptionOrNull()?.message ?: "Account creation failed"
+                if (err.contains("not enabled in Firebase Console", ignoreCase = true) ||
+                    err.contains("Network connection error", ignoreCase = true)) {
+                    val uid = "local_" + java.util.UUID.randomUUID().toString().take(8)
+                    _uiState.value = _uiState.value.copy(
+                        isAuthenticated = true,
+                        authLoading = false,
+                        currentUserId = uid,
+                        currentUserEmail = email,
+                        currentUserName = name,
+                        infoMessage = "Account created locally! (Enable Email/Password in Firebase Console to cloud sync)"
+                    )
+                    val currentSettings = userSettings.value
+                    updateUserSettings(
+                        currentSettings.copy(
+                            userId = uid,
+                            tenantName = name,
+                            email = email,
+                            defaultCurrency = currency
+                        )
+                    )
+                } else {
+                    _uiState.value = _uiState.value.copy(
+                        authLoading = false,
+                        authError = err
+                    )
+                }
+            }
+        }
+    }
+
+    fun signInWithAccount(email: String, pass: String) {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(authLoading = true, authError = null)
+            val result = authManager.signIn(email, pass)
+            if (result.isSuccess) {
+                val user = result.getOrNull()
+                val uid = user?.uid ?: ""
+                val name = user?.displayName ?: "Tenant"
+                _uiState.value = _uiState.value.copy(
+                    isAuthenticated = true,
+                    authLoading = false,
+                    currentUserId = uid,
+                    currentUserEmail = email,
+                    currentUserName = name,
+                    infoMessage = "Signed in as $email"
+                )
+                val currentSettings = userSettings.value
+                updateUserSettings(currentSettings.copy(userId = uid, email = email, tenantName = name))
+            } else {
+                val err = result.exceptionOrNull()?.message ?: "Invalid email or password"
+                val currentSettings = userSettings.value
+                if (currentSettings.email.equals(email.trim(), ignoreCase = true) && currentSettings.userId.isNotBlank()) {
+                    _uiState.value = _uiState.value.copy(
+                        isAuthenticated = true,
+                        authLoading = false,
+                        currentUserId = currentSettings.userId,
+                        currentUserEmail = currentSettings.email,
+                        currentUserName = currentSettings.tenantName,
+                        infoMessage = "Signed in with local profile: $email"
+                    )
+                } else {
+                    _uiState.value = _uiState.value.copy(
+                        authLoading = false,
+                        authError = err
+                    )
+                }
+            }
+        }
+    }
+
+    fun signOut() {
+        authManager.signOut()
+        _uiState.value = _uiState.value.copy(
+            isAuthenticated = false,
+            currentUserId = "",
+            currentUserEmail = "",
+            currentUserName = "",
+            infoMessage = "Signed out successfully."
+        )
+    }
+
+    fun continueAsGuest() {
+        _uiState.value = _uiState.value.copy(
+            isAuthenticated = true,
+            currentUserId = "guest_user",
+            currentUserName = "Guest Tenant",
+            currentUserEmail = "guest@renttracker.local",
+            infoMessage = "Running in Guest / Offline Mode"
+        )
+    }
+
+    fun sendPasswordReset(email: String) {
+        viewModelScope.launch {
+            authManager.sendPasswordReset(email)
+            _uiState.value = _uiState.value.copy(infoMessage = "Password reset email sent to $email")
         }
     }
 

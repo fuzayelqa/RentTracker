@@ -548,8 +548,8 @@ fun DashboardScreen(
                         title = if (isBangla) "সক্রিয় প্রোপার্টি" else "Active Homes",
                         value = "${summary.activePropertiesCount} ${if (summary.activePropertiesCount == 1) "Property" else "Properties"}",
                         icon = Icons.Default.HomeWork,
-                        iconBgColor = Color(0xFFE0E7FF),
-                        iconTintColor = Color(0xFF4F46E5),
+                        iconBgColor = Color(0xFFF3E8FF),
+                        iconTintColor = Color(0xFF7E22CE),
                         subtitle = if (summary.nextDueDate.isNotBlank()) "Next: ${DateUtils.formatDisplayDate(summary.nextDueDate)}" else null,
                         modifier = Modifier.weight(1f)
                     )

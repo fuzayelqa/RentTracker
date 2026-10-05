@@ -12,6 +12,7 @@ import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.ReceiptLong
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
@@ -34,6 +35,7 @@ import com.example.ui.RentTrackerViewModel
 import com.example.ui.components.AddPaymentDialog
 import com.example.ui.components.PaymentReceiptDialog
 import com.example.ui.components.PinLockScreen
+import com.example.ui.screens.AuthScreen
 import com.example.ui.screens.DashboardScreen
 import com.example.ui.screens.HistoryScreen
 import com.example.ui.screens.NotificationsScreen
@@ -74,6 +76,19 @@ fun RentTrackerApp(viewModel: RentTrackerViewModel) {
         }
     }
 
+    // If not authenticated, prompt user to sign in or create an account
+    if (!uiState.isAuthenticated) {
+        AuthScreen(
+            isLoading = uiState.authLoading,
+            errorMessage = uiState.authError,
+            onSignIn = { email, pass -> viewModel.signInWithAccount(email, pass) },
+            onSignUp = { name, email, pass, curr -> viewModel.signUpWithAccount(name, email, pass, curr) },
+            onSendResetPassword = { email -> viewModel.sendPasswordReset(email) },
+            onContinueGuest = { viewModel.continueAsGuest() }
+        )
+        return
+    }
+
     // If PIN lock is active, render PinLockScreen exclusively
     if (uiState.isAppLocked) {
         PinLockScreen(
@@ -91,10 +106,12 @@ fun RentTrackerApp(viewModel: RentTrackerViewModel) {
     }
 
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
         snackbarHost = { SnackbarHost(snackbarHostState) },
         bottomBar = {
             if (currentScreen != Screen.NOTIFICATIONS) {
                 NavigationBar(
+                    containerColor = MaterialTheme.colorScheme.surface,
                     modifier = Modifier
                         .navigationBarsPadding()
                         .testTag("main_bottom_nav")
@@ -190,9 +207,11 @@ fun RentTrackerApp(viewModel: RentTrackerViewModel) {
                     SettingsScreen(
                         userSettings = userSettings,
                         auditLogs = auditLogs,
+                        currentUserEmail = uiState.currentUserEmail,
                         isSyncing = uiState.isSyncing,
                         lastSyncTime = uiState.lastSyncTime,
                         onSyncWithFirebase = { viewModel.syncWithFirebase() },
+                        onSignOut = { viewModel.signOut() },
                         onUpdateSettings = { viewModel.updateUserSettings(it) },
                         onLockApp = { viewModel.lockApp() },
                         onSeedDemoData = { viewModel.seedDemoData() },

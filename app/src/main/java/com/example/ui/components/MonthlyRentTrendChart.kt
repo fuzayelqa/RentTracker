@@ -121,7 +121,7 @@ fun MonthlyRentTrendChart(
                 Box(
                     modifier = Modifier
                         .size(10.dp)
-                        .background(Color(0xFFCBD5E1), CircleShape)
+                        .background(Color(0xFFE9D5FF), CircleShape)
                 )
                 Spacer(modifier = Modifier.width(4.dp))
                 Text(text = "Due", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -131,7 +131,7 @@ fun MonthlyRentTrendChart(
                 Box(
                     modifier = Modifier
                         .size(10.dp)
-                        .background(Color(0xFF059669), CircleShape)
+                        .background(Color(0xFFDB2777), CircleShape)
                 )
                 Spacer(modifier = Modifier.width(4.dp))
                 Text(text = "Paid", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -140,8 +140,8 @@ fun MonthlyRentTrendChart(
             Spacer(modifier = Modifier.height(16.dp))
 
             // Canvas Bar Chart
-            val dueColor = Color(0xFFE2E8F0)
-            val paidColor = Color(0xFF059669)
+            val dueColor = Color(0xFFF3E8FF)
+            val paidColor = Color(0xFFDB2777)
             val highlightColor = MaterialTheme.colorScheme.primaryContainer
 
             Canvas(

@@ -49,14 +49,14 @@ fun RentStatusBadge(
             "Overdue"
         )
         "OVERPAID" -> Quadruple(
-            Color(0xFFE3F2FD),
-            Color(0xFF1565C0),
+            Color(0xFFF3E8FF),
+            Color(0xFF7E22CE),
             Icons.Default.CheckCircle,
             "Overpaid / Credit"
         )
         else -> Quadruple(
-            Color(0xFFECEFF1),
-            Color(0xFF455A64),
+            Color(0xFFF5EEF8),
+            Color(0xFF6B487A),
             Icons.Default.ErrorOutline,
             "Unpaid"
         )

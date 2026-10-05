@@ -7,6 +7,7 @@ import java.util.UUID
 @Entity(tableName = "properties")
 data class PropertyEntity(
     @PrimaryKey val id: String = UUID.randomUUID().toString(),
+    val userId: String = "",
     val name: String,
     val address: String,
     val city: String,
@@ -45,6 +46,7 @@ data class RecurringChargeEntity(
 @Entity(tableName = "rent_months")
 data class RentMonthEntity(
     @PrimaryKey val id: String = UUID.randomUUID().toString(),
+    val userId: String = "",
     val propertyId: String,
     val year: Int,
     val month: Int, // 1 to 12
@@ -66,6 +68,7 @@ data class RentMonthEntity(
 @Entity(tableName = "payments")
 data class PaymentEntity(
     @PrimaryKey val id: String = UUID.randomUUID().toString(),
+    val userId: String = "",
     val propertyId: String,
     val rentMonthId: String,
     val receiptNumber: String = "",
@@ -81,6 +84,7 @@ data class PaymentEntity(
 @Entity(tableName = "notifications")
 data class AppNotificationEntity(
     @PrimaryKey val id: String = UUID.randomUUID().toString(),
+    val userId: String = "",
     val type: String, // DUE_REMINDER, OVERDUE, PAYMENT_CONFIRMED, LEASE_EXPIRING, SYSTEM
     val title: String,
     val message: String,
@@ -93,6 +97,7 @@ data class AppNotificationEntity(
 @Entity(tableName = "audit_logs")
 data class AuditLogEntity(
     @PrimaryKey val id: String = UUID.randomUUID().toString(),
+    val userId: String = "",
     val action: String, // CREATE_PAYMENT, UPDATE_PAYMENT, DELETE_PAYMENT, CREATE_PROPERTY, UPDATE_PROPERTY, ARCHIVE_PROPERTY, RENT_CHANGED
     val entityType: String, // Property, Payment, RentMonth
     val entityId: String,
@@ -105,6 +110,7 @@ data class AuditLogEntity(
 @Entity(tableName = "user_settings")
 data class UserSettingsEntity(
     @PrimaryKey val id: Int = 1,
+    val userId: String = "",
     val tenantName: String = "Tenant",
     val email: String = "user@renttracker.app",
     val phone: String = "",

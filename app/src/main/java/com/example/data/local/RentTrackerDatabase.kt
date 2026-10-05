@@ -23,7 +23,7 @@ import com.example.data.local.entity.UserSettingsEntity
         AuditLogEntity::class,
         UserSettingsEntity::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 abstract class RentTrackerDatabase : RoomDatabase() {

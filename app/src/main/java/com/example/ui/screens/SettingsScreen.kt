@@ -1,6 +1,7 @@
 package com.example.ui.screens
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -78,9 +79,11 @@ import java.util.Locale
 fun SettingsScreen(
     userSettings: UserSettingsEntity,
     auditLogs: List<AuditLogEntity>,
+    currentUserEmail: String = "",
     isSyncing: Boolean = false,
     lastSyncTime: String? = null,
     onSyncWithFirebase: () -> Unit = {},
+    onSignOut: () -> Unit = {},
     onUpdateSettings: (UserSettingsEntity) -> Unit,
     onLockApp: () -> Unit,
     onSeedDemoData: () -> Unit,
@@ -134,6 +137,29 @@ fun SettingsScreen(
                             Text(text = "Profile & Tenant Info", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall)
                         }
                         Spacer(modifier = Modifier.height(12.dp))
+
+                        if (currentUserEmail.isNotBlank()) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
+                                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text("Signed In Account", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text(currentUserEmail, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                                }
+                                OutlinedButton(
+                                    onClick = onSignOut,
+                                    modifier = Modifier.testTag("settings_sign_out_btn")
+                                ) {
+                                    Text("Sign Out", fontSize = 11.sp)
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(10.dp))
+                        }
 
                         OutlinedTextField(
                             value = tenantName,
