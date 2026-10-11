@@ -1,6 +1,6 @@
 {
-  "name": "RentTracker",
-  "description": "Home rent management and payment tracking app with Firestore synchronization, payment ledger, and reminders",
+  "name": "My Rent Tracker",
+  "description": "v2.1 - Simple house rent records app with full yellow & navy theme, current month focus on Home, permanent record locking, advance rent tracking from July 2026, Firebase cloud sync, and Excel/PDF report download.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

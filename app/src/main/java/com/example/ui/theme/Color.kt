@@ -2,96 +2,159 @@ package com.example.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// Exact Cyan Background requested: #00f6ff
-val ElectricCyanBg = Color(0xFF00F6FF) // #00f6ff
+// ====================================================
+// ALL YELLOW BACKGROUND & NAVY BLUE COLOR PALETTE
+// ====================================================
 
-// Vibrant Accents (Pink & Purple)
-val PurplePrimary = Color(0xFF7E22CE) // Vibrant Purple
-val OnPurplePrimary = Color(0xFFFFFFFF)
-val PurplePrimaryContainer = Color(0xFFF3E8FF) // Light Lilac
-val OnPurplePrimaryContainer = Color(0xFF4C0F7C)
+// 1. Navy Blue Elements
+val NavyPrimary = Color(0xFF0F172A) // Deep Midnight Navy Blue
+val NavySecondary = Color(0xFF1E3A8A) // Royal Navy Blue
+val NavySlate = Color(0xFF334155) // Slate Navy
+val NavyDarkest = Color(0xFF020617) // Ultra Deep Navy
+val OnNavyPrimary = Color(0xFFFACC15) // Bold Yellow on Navy
+val NavyContainer = Color(0xFF0F172A) // Dark Navy Container
+val OnNavyContainer = Color(0xFFFACC15) // Bold Yellow on Navy
 
-val PinkSecondary = Color(0xFFDB2777) // Vibrant Rose Pink
-val OnPinkSecondary = Color(0xFFFFFFFF)
-val PinkSecondaryContainer = Color(0xFFFCE7F3) // Soft Pink Blush
-val OnPinkSecondaryContainer = Color(0xFF831843)
+// 2. Yellow Backgrounds & Surfaces (NO White background)
+val YellowBackground = Color(0xFFFEF08A) // Vibrant, warm sunny yellow background
+val YellowCardSurface = Color(0xFFFEF9C3) // Warm soft cream-yellow card surface
+val YellowCardElevated = Color(0xFFFFFBEB) // Luminous sunny cream card surface
+val YellowPrimary = Color(0xFFFACC15) // Sunflower Yellow (#FACC15)
+val YellowDeep = Color(0xFFEAB308) // Golden Amber Yellow
+val YellowLight = Color(0xFFFEF08A) // Soft Luminous Yellow
+val YellowContainer = Color(0xFFFEF9C3) // Warm Soft Yellow Container
+val OnYellowPrimary = Color(0xFF0F172A) // Deep Navy Blue on Yellow
+val OnYellowAccent = Color(0xFF0F172A)
 
-val FuchsiaTertiary = Color(0xFFA855F7) // Fuchsia / Orchid
-val OnFuchsiaTertiary = Color(0xFFFFFFFF)
-val FuchsiaTertiaryContainer = Color(0xFFFAF5FF)
-val OnFuchsiaTertiaryContainer = Color(0xFF581C87)
+// 3. High-Contrast Typography & Borders (Navy Blue on Yellow)
+val DarkNavyText = Color(0xFF0F172A) // Deep midnight navy text (maximum contrast on yellow)
+val DarkSlateText = Color(0xFF334155) // Slate navy sub-labels
+val NavyBorder = Color(0xFF0F172A) // Midnight navy border
+val YellowBorder = Color(0xFFEAB308) // Deep golden yellow border
+val SubtleBorder = Color(0xFFCA8A04) // Darker yellow border for clear contrast
 
-// Surfaces & Text for high contrast and clean design on #00f6ff
-val CrispWhiteSurface = Color(0xFFFFFFFF) // Crisp white card surfaces
-val SoftIceSurfaceVariant = Color(0xFFF0FDFF) // Light ice-cyan card variant
-val DeepCyanDarkText = Color(0xFF00363D) // High contrast text on #00f6ff
-val CardTitleText = Color(0xFF0F172A) // Crisp dark text on white cards
-val CardSubtitleText = Color(0xFF475569) // Subtitle text on white cards
-val CyanBorder = Color(0xFF00D2DD) // Subtle border
-val SoftBorderVariant = Color(0xFFE0F7FA)
+// 4. Status Colors
+val SuccessGreen = Color(0xFF15803D) // Paid status
+val SuccessGreenBg = Color(0xFFDCFCE7)
+val SuccessGreenText = Color(0xFF14532D)
 
-// Light Scheme with #00f6ff background
-val LightBackground = ElectricCyanBg
-val LightOnBackground = DeepCyanDarkText
-val LightSurface = CrispWhiteSurface
-val LightOnSurface = CardTitleText
-val LightSurfaceVariant = SoftIceSurfaceVariant
-val LightOnSurfaceVariant = CardSubtitleText
-val LightOutline = CyanBorder
-val LightOutlineVariant = SoftBorderVariant
+val PendingAmber = Color(0xFFC2410C) // Pending status
+val PendingAmberBg = Color(0xFFFFEDD5)
+val PendingAmberText = Color(0xFF7C2D12)
 
-// Dark Scheme mapped to Electric Cyan #00f6ff as requested
-val PurpleDarkPrimary = PurplePrimary
-val OnPurpleDarkPrimary = OnPurplePrimary
-val PurpleDarkPrimaryContainer = PurplePrimaryContainer
-val OnPurpleDarkPrimaryContainer = OnPurplePrimaryContainer
+val AdvanceNavy = Color(0xFF1E3A8A) // Advance Rent in Royal Navy
+val AdvanceNavyBg = Color(0xFFDBEAFE)
+val AdvanceNavyText = Color(0xFF1E3A8A)
 
-val PinkDarkSecondary = PinkSecondary
-val OnPinkDarkSecondary = OnPinkSecondary
-val PinkDarkSecondaryContainer = PinkSecondaryContainer
-val OnPinkDarkSecondaryContainer = OnPinkSecondaryContainer
+val AlertRed = Color(0xFFDC2626) // Warning/Delete
+val AlertRedBg = Color(0xFFFEE2E2)
+val AlertRedText = Color(0xFF991B1B)
 
-val FuchsiaDarkTertiary = FuchsiaTertiary
-val OnFuchsiaDarkTertiary = OnFuchsiaTertiary
-val FuchsiaDarkTertiaryContainer = FuchsiaTertiaryContainer
-val OnFuchsiaDarkTertiaryContainer = OnFuchsiaTertiaryContainer
+val LockedBadgeBg = Color(0xFFFEF08A) // Yellow locked badge
+val LockedBadgeBorder = Color(0xFFCA8A04)
+val LockedBadgeText = Color(0xFF713F12)
 
-val DarkBackground = ElectricCyanBg
-val DarkOnBackground = DeepCyanDarkText
-val DarkSurface = CrispWhiteSurface
-val DarkOnSurface = CardTitleText
-val DarkSurfaceVariant = SoftIceSurfaceVariant
-val DarkOnSurfaceVariant = CardSubtitleText
-val DarkOutline = CyanBorder
-val DarkOutlineVariant = SoftBorderVariant
+// Theme Mappings: Whole Background & Surfaces in Yellow
+val LightBackground = YellowBackground
+val LightOnBackground = DarkNavyText
+val LightSurface = YellowCardSurface
+val LightOnSurface = DarkNavyText
+val LightSurfaceVariant = YellowContainer
+val LightOnSurfaceVariant = DarkNavyText
+val LightOutline = NavyBorder
+val LightOutlineVariant = YellowBorder
 
-// Aliases for backwards compatibility
-val EmeraldPrimary = PurplePrimary
-val OnEmeraldPrimary = OnPurplePrimary
-val EmeraldPrimaryContainer = PurplePrimaryContainer
-val OnEmeraldPrimaryContainer = OnPurplePrimaryContainer
+val DarkBackground = YellowBackground
+val DarkOnBackground = DarkNavyText
+val DarkSurface = YellowCardSurface
+val DarkOnSurface = DarkNavyText
+val DarkSurfaceVariant = YellowContainer
+val DarkOnSurfaceVariant = DarkNavyText
+val DarkOutline = NavyBorder
+val DarkOutlineVariant = YellowBorder
 
-val AmberSecondary = PinkSecondary
-val OnAmberSecondary = OnPinkSecondary
-val AmberSecondaryContainer = PinkSecondaryContainer
-val OnAmberSecondaryContainer = OnPinkSecondaryContainer
+// Compat Aliases (Map previous PureWhiteCard to YellowCardSurface)
+val PureWhiteCard = YellowCardSurface // All white card backgrounds replaced by yellow!
+val BackgroundWarmLight = YellowBackground
+val BackgroundVeryLight = YellowBackground
+val SkyBluePrimary = NavyPrimary
+val SkyBlueLight = YellowPrimary
+val OnSkyBluePrimary = OnNavyPrimary
+val SkyBlueContainer = YellowContainer
+val OnSkyBlueContainer = DarkNavyText
+val YellowAccent = YellowPrimary
+val SkyBlueBorder = YellowBorder
+val PrimaryColor = NavyPrimary
+val TextPrimary = DarkNavyText
+val TextSecondary = DarkSlateText
+val CardBorder = YellowBorder
+val PaidGreen = SuccessGreen
+val PaidGreenBg = SuccessGreenBg
+val PaidGreenText = SuccessGreenText
+val UnpaidAmber = PendingAmber
+val UnpaidAmberBg = PendingAmberBg
+val UnpaidAmberText = PendingAmberText
+val OverdueRed = AlertRed
+val AdvancePurple = AdvanceNavy
+val AdvancePurpleBg = AdvanceNavyBg
+val AdvancePurpleText = AdvanceNavyText
 
-val SlateTertiary = FuchsiaTertiary
-val OnSlateTertiary = OnFuchsiaTertiary
-val SlateTertiaryContainer = FuchsiaTertiaryContainer
-val OnSlateTertiaryContainer = OnFuchsiaTertiaryContainer
+val PurplePrimary = NavyPrimary
+val OnPurplePrimary = OnNavyPrimary
+val PurplePrimaryContainer = YellowContainer
+val OnPurplePrimaryContainer = DarkNavyText
 
-val EmeraldDarkPrimary = PurpleDarkPrimary
-val OnEmeraldDarkPrimary = OnPurpleDarkPrimary
-val EmeraldDarkPrimaryContainer = PurpleDarkPrimaryContainer
-val OnEmeraldDarkPrimaryContainer = OnPurpleDarkPrimaryContainer
+val PinkSecondary = YellowPrimary
+val OnPinkSecondary = OnYellowPrimary
+val PinkSecondaryContainer = YellowContainer
+val OnPinkSecondaryContainer = DarkNavyText
 
-val AmberDarkSecondary = PinkDarkSecondary
-val OnAmberDarkSecondary = OnPinkDarkSecondary
-val AmberDarkSecondaryContainer = PinkDarkSecondaryContainer
-val OnAmberDarkSecondaryContainer = OnPinkDarkSecondaryContainer
+val FuchsiaTertiary = NavySecondary
+val OnFuchsiaTertiary = OnNavyPrimary
+val FuchsiaTertiaryContainer = YellowContainer
+val OnFuchsiaTertiaryContainer = DarkNavyText
 
-val SlateDarkTertiary = FuchsiaDarkTertiary
-val OnSlateDarkTertiary = OnFuchsiaDarkTertiary
-val SlateDarkTertiaryContainer = FuchsiaDarkTertiaryContainer
-val OnSlateDarkTertiaryContainer = OnFuchsiaDarkTertiaryContainer
+val EmeraldPrimary = NavyPrimary
+val OnEmeraldPrimary = OnNavyPrimary
+val EmeraldPrimaryContainer = YellowContainer
+val OnEmeraldPrimaryContainer = DarkNavyText
+
+val AmberSecondary = YellowPrimary
+val OnAmberSecondary = OnYellowPrimary
+val AmberSecondaryContainer = YellowContainer
+val OnAmberSecondaryContainer = DarkNavyText
+
+val SlateTertiary = NavyPrimary
+val OnSlateTertiary = OnNavyPrimary
+val SlateTertiaryContainer = YellowContainer
+val OnSlateTertiaryContainer = DarkNavyText
+
+val EmeraldDarkPrimary = NavyPrimary
+val OnEmeraldDarkPrimary = OnNavyPrimary
+val EmeraldDarkPrimaryContainer = YellowContainer
+val OnEmeraldDarkPrimaryContainer = DarkNavyText
+
+val AmberDarkSecondary = YellowPrimary
+val OnAmberDarkSecondary = OnYellowPrimary
+val AmberDarkSecondaryContainer = YellowContainer
+val OnAmberDarkSecondaryContainer = DarkNavyText
+
+val SlateDarkTertiary = NavyPrimary
+val OnSlateDarkTertiary = OnNavyPrimary
+val SlateDarkTertiaryContainer = YellowContainer
+val OnSlateDarkTertiaryContainer = DarkNavyText
+
+val PurpleDarkPrimary = NavyPrimary
+val OnPurpleDarkPrimary = OnNavyPrimary
+val PurpleDarkPrimaryContainer = YellowContainer
+val OnPurpleDarkPrimaryContainer = DarkNavyText
+
+val PinkDarkSecondary = YellowPrimary
+val OnPinkDarkSecondary = OnYellowPrimary
+val PinkDarkSecondaryContainer = YellowContainer
+val OnPinkDarkSecondaryContainer = DarkNavyText
+
+val FuchsiaDarkTertiary = NavySecondary
+val OnFuchsiaDarkTertiary = OnNavyPrimary
+val FuchsiaDarkTertiaryContainer = YellowContainer
+val OnFuchsiaDarkTertiaryContainer = DarkNavyText

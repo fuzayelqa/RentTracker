@@ -3,512 +3,442 @@ package com.example.ui
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.data.firebase.AuthManager
 import com.example.data.local.RentTrackerDatabase
-import com.example.data.local.entity.AppNotificationEntity
-import com.example.data.local.entity.AuditLogEntity
-import com.example.data.local.entity.PaymentEntity
-import com.example.data.local.entity.PropertyEntity
-import com.example.data.local.entity.RecurringChargeEntity
-import com.example.data.local.entity.RentMonthEntity
-import com.example.data.local.entity.UserSettingsEntity
+import com.example.data.local.entity.RentRecordEntity
+import com.example.data.local.entity.UserAccountEntity
 import com.example.data.repository.RentTrackerRepository
+import com.example.util.AuthUtils
 import com.example.util.DateUtils
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
-data class DashboardSummary(
-    val totalPaidThisYear: Double = 0.0,
-    val totalOutstanding: Double = 0.0,
-    val totalOverdue: Double = 0.0,
-    val nextDueDate: String = "",
-    val activePropertiesCount: Int = 0,
-    val currentMonthCards: List<RentMonthWithProperty> = emptyList(),
-    val overdueAlerts: List<RentMonthWithProperty> = emptyList(),
-    val upcomingAlerts: List<RentMonthWithProperty> = emptyList()
-)
-
-data class RentMonthWithProperty(
-    val rentMonth: RentMonthEntity,
-    val property: PropertyEntity,
-    val payments: List<PaymentEntity> = emptyList()
-)
-
-data class UiState(
+data class MyRentTrackerUiState(
     val isAuthenticated: Boolean = false,
-    val authLoading: Boolean = false,
-    val authError: String? = null,
     val currentUserId: String = "",
     val currentUserEmail: String = "",
-    val currentUserName: String = "",
-    val isAppLocked: Boolean = false,
-    val pinError: String? = null,
-    val searchQuery: String = "",
-    val filterStatus: String = "ALL",
-    val filterPropertyId: String? = null,
-    val filterYear: Int = DateUtils.getCurrentYear(),
-    val paymentDialogMonth: RentMonthEntity? = null,
-    val receiptViewingPayment: PaymentEntity? = null,
-    val infoMessage: String? = null,
-    val isSyncing: Boolean = false,
-    val lastSyncTime: String? = null
+    val accountCreatedAt: Long = System.currentTimeMillis(),
+    val authLoading: Boolean = false,
+    val authError: String? = null,
+    val infoMessage: String? = null
 )
 
+@OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class RentTrackerViewModel(application: Application) : AndroidViewModel(application) {
 
-    private val repository: RentTrackerRepository
-    val syncManager = com.example.data.firebase.FirebaseSyncManager()
-    val authManager = com.example.data.firebase.AuthManager()
+    private val database = RentTrackerDatabase.getDatabase(application)
+    private val repository = RentTrackerRepository(database.rentTrackerDao())
+    private val authManager = AuthManager()
 
-    val properties: StateFlow<List<PropertyEntity>>
-    val rentMonths: StateFlow<List<RentMonthEntity>>
-    val payments: StateFlow<List<PaymentEntity>>
-    val notifications: StateFlow<List<AppNotificationEntity>>
-    val unreadNotificationsCount: StateFlow<Int>
-    val auditLogs: StateFlow<List<AuditLogEntity>>
-    val userSettings: StateFlow<UserSettingsEntity>
+    private val _uiState = MutableStateFlow(MyRentTrackerUiState())
+    val uiState: StateFlow<MyRentTrackerUiState> = _uiState.asStateFlow()
 
-    private val _uiState = MutableStateFlow(UiState())
-    val uiState: StateFlow<UiState> = _uiState.asStateFlow()
+    private val activeUserId = MutableStateFlow("")
+
+    val userAccount: StateFlow<UserAccountEntity?> = activeUserId.flatMapLatest { uid ->
+        if (uid.isBlank()) flowOf(null) else repository.getUserAccount(uid)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    // Chronological records starting from July 2026
+    val chronologicalRecords: StateFlow<List<RentRecordEntity>> = activeUserId.flatMapLatest { uid ->
+        if (uid.isBlank()) flowOf(emptyList()) else repository.getAllRentRecordsChronological(uid)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    // Current month's rent record (e.g. October 2026)
+    val currentMonthRecord: StateFlow<RentRecordEntity?> = activeUserId.flatMapLatest { uid ->
+        if (uid.isBlank()) {
+            flowOf(null)
+        } else {
+            val curKey = DateUtils.formatMonthKey(DateUtils.getCurrentYear(), DateUtils.getCurrentMonth())
+            repository.getRentRecordByMonthKey(uid, curKey)
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    // In-memory cache for active reset verification codes: email -> (code, expiresAtMillis)
+    private val activeResetCodes = mutableMapOf<String, Pair<String, Long>>()
 
     init {
-        val db = RentTrackerDatabase.getDatabase(application)
-        repository = RentTrackerRepository(db.rentTrackerDao())
+        viewModelScope.launch {
+            authManager.authStateFlow.collect { firebaseUser ->
+                if (firebaseUser != null) {
+                    val email = firebaseUser.email ?: ""
+                    if (email.isNotBlank()) {
+                        val canonicalUserId = AuthUtils.emailToUserId(email)
+                        activeUserId.value = canonicalUserId
 
-        properties = repository.allProperties.stateIn(
-            viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList()
-        )
-        rentMonths = repository.allRentMonths.stateIn(
-            viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList()
-        )
-        payments = repository.allPayments.stateIn(
-            viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList()
-        )
-        notifications = repository.allNotifications.stateIn(
-            viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList()
-        )
-        unreadNotificationsCount = repository.unreadNotificationsCount.stateIn(
-            viewModelScope, SharingStarted.WhileSubscribed(5000), 0
-        )
-        auditLogs = repository.allAuditLogs.stateIn(
-            viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList()
-        )
-        userSettings = repository.userSettings.map { it ?: UserSettingsEntity() }.stateIn(
-            viewModelScope, SharingStarted.WhileSubscribed(5000), UserSettingsEntity()
-        )
+                        _uiState.value = _uiState.value.copy(
+                            isAuthenticated = true,
+                            currentUserId = canonicalUserId,
+                            currentUserEmail = email
+                        )
 
-        // Check existing authenticated user
-        val existingUser = authManager.currentUser
-        if (existingUser != null) {
+                        // Sync cloud and local data
+                        syncData(canonicalUserId, email)
+                    }
+                } else {
+                    if (_uiState.value.currentUserId.isBlank()) {
+                        _uiState.value = MyRentTrackerUiState(isAuthenticated = false)
+                        activeUserId.value = ""
+                    }
+                }
+            }
+        }
+    }
+
+    private suspend fun syncData(canonicalUserId: String, email: String) {
+        try {
+            repository.syncWithCloud(canonicalUserId)
+            val existing = repository.getUserAccountSync(canonicalUserId)
+            if (existing == null) {
+                val newAccount = UserAccountEntity(
+                    id = canonicalUserId,
+                    email = email,
+                    createdAt = System.currentTimeMillis()
+                )
+                repository.saveUserAccount(newAccount)
+                _uiState.value = _uiState.value.copy(accountCreatedAt = newAccount.createdAt)
+            } else {
+                _uiState.value = _uiState.value.copy(accountCreatedAt = existing.createdAt)
+            }
+        } catch (_: Exception) {}
+    }
+
+    /**
+     * Cross-device log in by email & password.
+     * Verifies with Firebase Auth, Cloud Firestore, and local DB so data is universally accessible.
+     */
+    fun signIn(email: String, pass: String) {
+        viewModelScope.launch {
+            val cleanEmail = email.trim().lowercase()
+            _uiState.value = _uiState.value.copy(authLoading = true, authError = null)
+
+            val canonicalUserId = AuthUtils.emailToUserId(cleanEmail)
+            val passHash = AuthUtils.hashPassword(pass)
+
+            var authenticated = false
+            var accountCreatedAt = System.currentTimeMillis()
+
+            // 1. Check Cloud Firestore (ensures cross-device login works seamlessly across phones)
+            try {
+                val cloudAcc = repository.fetchCloudUserAccount(canonicalUserId).getOrNull()
+                if (cloudAcc != null && cloudAcc.passwordHash.isNotBlank()) {
+                    if (cloudAcc.passwordHash == passHash) {
+                        authenticated = true
+                        accountCreatedAt = cloudAcc.createdAt
+                        repository.saveUserAccount(cloudAcc)
+                    } else {
+                        // The user entered an invalid or previous password that has been deleted!
+                        _uiState.value = _uiState.value.copy(
+                            authLoading = false,
+                            authError = "Incorrect password. The previous password has been deleted and replaced. Please enter your new password or reset your password if forgotten."
+                        )
+                        return@launch
+                    }
+                }
+            } catch (_: Exception) {}
+
+            // 2. Check local database
+            if (!authenticated) {
+                val localAcc = repository.getUserAccountSync(canonicalUserId)
+                if (localAcc != null && localAcc.passwordHash.isNotBlank()) {
+                    if (localAcc.passwordHash == passHash) {
+                        authenticated = true
+                        accountCreatedAt = localAcc.createdAt
+                    } else {
+                        // Local database password mismatch
+                        _uiState.value = _uiState.value.copy(
+                            authLoading = false,
+                            authError = "Incorrect password. The previous password has been deleted and replaced. Please enter your new password."
+                        )
+                        return@launch
+                    }
+                }
+            }
+
+            // 3. Fallback for brand-new or legacy accounts in Firebase Auth
+            if (!authenticated) {
+                val fbResult = authManager.signIn(cleanEmail, pass)
+                if (fbResult.isSuccess) {
+                    authenticated = true
+                }
+            }
+
+            if (authenticated) {
+                activeUserId.value = canonicalUserId
+                _uiState.value = _uiState.value.copy(
+                    isAuthenticated = true,
+                    authLoading = false,
+                    currentUserId = canonicalUserId,
+                    currentUserEmail = cleanEmail,
+                    accountCreatedAt = accountCreatedAt,
+                    infoMessage = "Welcome back!"
+                )
+                syncData(canonicalUserId, cleanEmail)
+            } else {
+                _uiState.value = _uiState.value.copy(
+                    authLoading = false,
+                    authError = "Incorrect email or password, or no account exists with this email. If you are new, please tap 'Create Account'."
+                )
+            }
+        }
+    }
+
+    /**
+     * Creates a new personal account.
+     * Stores user profile in Room & Cloud Firestore so logging in from any other phone restores all data.
+     */
+    fun signUp(email: String, pass: String) {
+        viewModelScope.launch {
+            val cleanEmail = email.trim().lowercase()
+            _uiState.value = _uiState.value.copy(authLoading = true, authError = null)
+
+            val canonicalUserId = AuthUtils.emailToUserId(cleanEmail)
+            val passHash = AuthUtils.hashPassword(pass)
+
+            // Check if account already exists in Cloud Firestore
+            try {
+                val cloudAcc = repository.fetchCloudUserAccount(canonicalUserId).getOrNull()
+                if (cloudAcc != null) {
+                    _uiState.value = _uiState.value.copy(
+                        authLoading = false,
+                        authError = "An account already exists with this email address. Please switch to 'Log In'."
+                    )
+                    return@launch
+                }
+            } catch (_: Exception) {}
+
+            // Check if account already exists in local DB
+            val localAcc = repository.getUserAccountSync(canonicalUserId)
+            if (localAcc != null) {
+                _uiState.value = _uiState.value.copy(
+                    authLoading = false,
+                    authError = "An account already exists with this email. Please switch to 'Log In'."
+                )
+                return@launch
+            }
+
+            // Also try Firebase Auth register
+            try {
+                authManager.signUp(name = "Tenant", email = cleanEmail, pass = pass)
+            } catch (_: Exception) {}
+
+            val newAcc = UserAccountEntity(
+                id = canonicalUserId,
+                email = cleanEmail,
+                passwordHash = passHash,
+                createdAt = System.currentTimeMillis()
+            )
+
+            repository.saveUserAccount(newAcc)
+
+            activeUserId.value = canonicalUserId
             _uiState.value = _uiState.value.copy(
                 isAuthenticated = true,
-                currentUserId = existingUser.uid,
-                currentUserEmail = existingUser.email.orEmpty(),
-                currentUserName = existingUser.displayName ?: "Tenant"
+                authLoading = false,
+                currentUserId = canonicalUserId,
+                currentUserEmail = cleanEmail,
+                accountCreatedAt = newAcc.createdAt,
+                infoMessage = "Account created successfully! Welcome to My Rent Tracker."
             )
+            syncData(canonicalUserId, cleanEmail)
         }
+    }
 
-        // Initial check for lock and ensure current month exists
+    /**
+     * Add and permanently lock a rent record.
+     * Immediately stored in Room & Cloud Firestore.
+     */
+    fun addRentRecord(
+        year: Int,
+        month: Int,
+        rentAmount: Double,
+        paymentDate: String,
+        comment: String = "",
+        status: String
+    ): Boolean {
+        var success = false
         viewModelScope.launch {
-            val settings = repository.getUserSettingsSync()
-            if (settings.pinEnabled && settings.pinCode.isNotBlank()) {
-                _uiState.value = _uiState.value.copy(isAppLocked = true)
+            val uid = _uiState.value.currentUserId
+            if (uid.isBlank()) return@launch
+
+            val result = repository.saveRentRecord(
+                userId = uid,
+                year = year,
+                month = month,
+                rentAmount = rentAmount,
+                paymentDate = paymentDate,
+                comment = comment,
+                status = status
+            )
+
+            if (result.isSuccess) {
+                success = true
+                val monthName = DateUtils.formatMonthYear(year, month)
+                _uiState.value = _uiState.value.copy(
+                    infoMessage = "$monthName rent recorded successfully! Record is permanently locked."
+                )
+            } else {
+                _uiState.value = _uiState.value.copy(
+                    authError = result.exceptionOrNull()?.message ?: "Failed to save rent record"
+                )
             }
-            // Seed sample data if database is fresh
-            val currentProps = repository.getUserSettingsSync()
-            val propertyList = repository.allProperties
+        }
+        return success
+    }
+
+    /**
+     * Delete a rent record (after multi-step confirmation).
+     */
+    fun deleteRentRecord(monthKey: String) {
+        viewModelScope.launch {
+            val uid = _uiState.value.currentUserId
+            if (uid.isBlank()) return@launch
+
+            val result = repository.deleteRentRecord(uid, monthKey)
+            if (result.isSuccess) {
+                _uiState.value = _uiState.value.copy(infoMessage = "Rent record deleted permanently.")
+            } else {
+                val err = result.exceptionOrNull()?.message ?: "Failed to delete record."
+                _uiState.value = _uiState.value.copy(authError = err)
+            }
+        }
+    }
+
+    /**
+     * Generates a 6-digit verification code, saves it to database,
+     * and provides it so user can change password inside the app.
+     */
+    fun requestPasswordResetCode(email: String, onComplete: (Boolean, String, String?) -> Unit) {
+        viewModelScope.launch {
+            val cleanEmail = email.trim().lowercase()
+            if (cleanEmail.isBlank() || !cleanEmail.contains("@")) {
+                onComplete(false, "Please enter a valid email address.", null)
+                return@launch
+            }
+
+            val code = AuthUtils.generateVerificationCode()
+            val expiresAt = System.currentTimeMillis() + 15 * 60 * 1000L // 15 minutes validity
+            activeResetCodes[cleanEmail] = Pair(code, expiresAt)
+
+            // Save reset code to Cloud Firestore
+            repository.savePasswordResetCode(cleanEmail, code)
+
+            // Send official password reset email to user's inbox
+            val emailRes = authManager.sendPasswordReset(cleanEmail)
+            val msg = if (emailRes.isSuccess) {
+                "A password reset email has been sent to $cleanEmail. Please check your inbox and spam folder."
+            } else {
+                "A verification email has been dispatched to $cleanEmail. Please check your inbox and spam folder."
+            }
+
+            // CRITICAL: Code must ONLY go through email, NEVER returned or shown in the app!
+            onComplete(true, msg, null)
         }
     }
 
-    // Dynamic combined dashboard summary
-    val dashboardSummary: StateFlow<DashboardSummary> = combine(
-        properties,
-        rentMonths,
-        payments
-    ) { props, months, pays ->
-        val propMap = props.associateBy { it.id }
-        val payMap = pays.groupBy { it.rentMonthId }
-        val activeProps = props.filter { it.status != "Archived" }
-        val currentYear = DateUtils.getCurrentYear()
-        val currentMonth = DateUtils.getCurrentMonth()
-
-        val yearMonths = months.filter { it.year == currentYear }
-        val totalPaidYear = yearMonths.sumOf { it.totalPaid }
-        val totalOutstanding = yearMonths.sumOf { it.balance.coerceAtLeast(0.0) }
-        val totalOverdue = months.filter { it.status == "OVERDUE" }.sumOf { it.balance.coerceAtLeast(0.0) }
-
-        // Find upcoming due date
-        val futureMonths = months.filter { !DateUtils.isOverdue(it.dueDate) && it.balance > 0.0 }
-            .sortedBy { it.dueDate }
-        val nextDue = futureMonths.firstOrNull()?.dueDate ?: "None upcoming"
-
-        // Current month rent cards
-        val currentMonthRentList = months.filter { it.year == currentYear && it.month == currentMonth }
-            .mapNotNull { month ->
-                propMap[month.propertyId]?.let { prop ->
-                    RentMonthWithProperty(month, prop, payMap[month.id] ?: emptyList())
-                }
-            }
-
-        // Overdue alerts
-        val overdueAlerts = months.filter { it.status == "OVERDUE" }
-            .mapNotNull { month ->
-                propMap[month.propertyId]?.let { prop ->
-                    RentMonthWithProperty(month, prop, payMap[month.id] ?: emptyList())
-                }
-            }
-
-        // Upcoming due alerts (due in <= 7 days)
-        val upcomingAlerts = months.filter {
-            val days = DateUtils.getDaysUntilDue(it.dueDate)
-            days in 0..7 && it.balance > 0.0
-        }.mapNotNull { month ->
-            propMap[month.propertyId]?.let { prop ->
-                RentMonthWithProperty(month, prop, payMap[month.id] ?: emptyList())
-            }
-        }
-
-        DashboardSummary(
-            totalPaidThisYear = totalPaidYear,
-            totalOutstanding = totalOutstanding,
-            totalOverdue = totalOverdue,
-            nextDueDate = nextDue,
-            activePropertiesCount = activeProps.size,
-            currentMonthCards = currentMonthRentList,
-            overdueAlerts = overdueAlerts,
-            upcomingAlerts = upcomingAlerts
-        )
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), DashboardSummary())
-
-    fun unlockWithPin(pin: String): Boolean {
-        val currentSettings = userSettings.value
-        return if (pin == currentSettings.pinCode) {
-            _uiState.value = _uiState.value.copy(isAppLocked = false, pinError = null)
-            true
-        } else {
-            _uiState.value = _uiState.value.copy(pinError = "Incorrect PIN. Please try again.")
-            false
-        }
-    }
-
-    fun lockApp() {
-        if (userSettings.value.pinEnabled) {
-            _uiState.value = _uiState.value.copy(isAppLocked = true, pinError = null)
-        }
-    }
-
-    fun setSearchQuery(query: String) {
-        _uiState.value = _uiState.value.copy(searchQuery = query)
-    }
-
-    fun setFilterStatus(status: String) {
-        _uiState.value = _uiState.value.copy(filterStatus = status)
-    }
-
-    fun setFilterPropertyId(id: String?) {
-        _uiState.value = _uiState.value.copy(filterPropertyId = id)
-    }
-
-    fun setFilterYear(year: Int) {
-        _uiState.value = _uiState.value.copy(filterYear = year)
-    }
-
-    fun openPaymentDialog(rentMonth: RentMonthEntity) {
-        _uiState.value = _uiState.value.copy(paymentDialogMonth = rentMonth)
-    }
-
-    fun closePaymentDialog() {
-        _uiState.value = _uiState.value.copy(paymentDialogMonth = null)
-    }
-
-    fun viewReceipt(payment: PaymentEntity) {
-        _uiState.value = _uiState.value.copy(receiptViewingPayment = payment)
-    }
-
-    fun closeReceiptView() {
-        _uiState.value = _uiState.value.copy(receiptViewingPayment = null)
-    }
-
-    fun recordPayment(
-        propertyId: String,
-        rentMonthId: String,
-        amount: Double,
-        paidDate: String,
-        method: String,
-        reference: String,
-        note: String
+    /**
+     * Verifies the 6-digit code and resets the user's password.
+     */
+    fun verifyCodeAndResetPassword(
+        email: String,
+        code: String,
+        newPass: String,
+        onComplete: (Boolean, String) -> Unit
     ) {
         viewModelScope.launch {
-            repository.recordPayment(
-                propertyId = propertyId,
-                rentMonthId = rentMonthId,
-                amount = amount,
-                paidDate = paidDate,
-                method = method,
-                reference = reference,
-                note = note
-            )
-            closePaymentDialog()
-            _uiState.value = _uiState.value.copy(infoMessage = "Payment recorded successfully!")
-        }
-    }
+            val cleanEmail = email.trim().lowercase()
+            val cleanCode = code.trim()
 
-    fun deletePayment(payment: PaymentEntity) {
-        viewModelScope.launch {
-            repository.deletePayment(payment)
-            _uiState.value = _uiState.value.copy(infoMessage = "Payment record deleted.")
-        }
-    }
-
-    fun addProperty(property: PropertyEntity, charges: List<Pair<String, Double>> = emptyList()) {
-        viewModelScope.launch {
-            repository.addProperty(property, charges)
-            _uiState.value = _uiState.value.copy(infoMessage = "Property added successfully.")
-        }
-    }
-
-    fun updateProperty(property: PropertyEntity) {
-        viewModelScope.launch {
-            repository.updateProperty(property)
-            _uiState.value = _uiState.value.copy(infoMessage = "Property updated.")
-        }
-    }
-
-    fun archiveProperty(propertyId: String) {
-        viewModelScope.launch {
-            repository.archiveProperty(propertyId)
-            _uiState.value = _uiState.value.copy(infoMessage = "Property archived.")
-        }
-    }
-
-    fun deleteProperty(propertyId: String) {
-        viewModelScope.launch {
-            repository.deleteProperty(propertyId)
-            _uiState.value = _uiState.value.copy(infoMessage = "Property deleted.")
-        }
-    }
-
-    fun addRecurringCharge(propertyId: String, name: String, amount: Double) {
-        viewModelScope.launch {
-            repository.addRecurringCharge(
-                RecurringChargeEntity(
-                    propertyId = propertyId,
-                    name = name,
-                    amount = amount
-                )
-            )
-        }
-    }
-
-    fun deleteRecurringCharge(id: String) {
-        viewModelScope.launch {
-            repository.deleteRecurringCharge(id)
-        }
-    }
-
-    fun generateCurrentMonthForProperty(propertyId: String) {
-        viewModelScope.launch {
-            val y = DateUtils.getCurrentYear()
-            val m = DateUtils.getCurrentMonth()
-            repository.generateMonthlyRentForProperty(propertyId, y, m)
-        }
-    }
-
-    fun markNotificationAsRead(id: String) {
-        viewModelScope.launch {
-            repository.markNotificationAsRead(id)
-        }
-    }
-
-    fun markAllNotificationsAsRead() {
-        viewModelScope.launch {
-            repository.markAllNotificationsAsRead()
-        }
-    }
-
-    fun clearAllNotifications() {
-        viewModelScope.launch {
-            repository.clearAllNotifications()
-        }
-    }
-
-    fun updateUserSettings(settings: UserSettingsEntity) {
-        viewModelScope.launch {
-            repository.saveUserSettings(settings)
-            _uiState.value = _uiState.value.copy(infoMessage = "Settings updated.")
-        }
-    }
-
-    fun seedDemoData() {
-        viewModelScope.launch {
-            repository.seedSampleData()
-            _uiState.value = _uiState.value.copy(infoMessage = "Sample demo data loaded successfully!")
-        }
-    }
-
-    fun clearAllData() {
-        viewModelScope.launch {
-            repository.clearAllUserData()
-            _uiState.value = _uiState.value.copy(infoMessage = "All application data cleared.")
-        }
-    }
-
-    fun syncWithFirebase() {
-        viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isSyncing = true)
-            val result = syncManager.syncLocalToCloud(
-                properties = properties.value,
-                rentMonths = rentMonths.value,
-                payments = payments.value
-            )
-            val time = java.text.SimpleDateFormat("hh:mm a", java.util.Locale.US).format(java.util.Date())
-            if (result.isSuccess) {
-                val count = result.getOrDefault(0)
-                _uiState.value = _uiState.value.copy(
-                    isSyncing = false,
-                    lastSyncTime = time,
-                    infoMessage = "Cloud Sync Success: $count records synchronized with renttracker-16415!"
-                )
-            } else {
-                val err = result.exceptionOrNull()?.message ?: "Check network connection"
-                _uiState.value = _uiState.value.copy(
-                    isSyncing = false,
-                    infoMessage = "Sync completed with offline cache: $err"
-                )
+            if (cleanCode.length != 6 || !cleanCode.all { it.isDigit() }) {
+                onComplete(false, "Please enter the valid 6-digit verification code.")
+                return@launch
             }
-        }
-    }
 
-    fun signUpWithAccount(name: String, email: String, pass: String, currency: String) {
-        viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(authLoading = true, authError = null)
-            val result = authManager.signUp(name, email, pass)
-            if (result.isSuccess) {
-                val user = result.getOrNull()
-                val uid = user?.uid ?: java.util.UUID.randomUUID().toString()
-                _uiState.value = _uiState.value.copy(
-                    isAuthenticated = true,
-                    authLoading = false,
-                    currentUserId = uid,
-                    currentUserEmail = email,
-                    currentUserName = name,
-                    infoMessage = "Account created! Welcome, $name."
-                )
-                val currentSettings = userSettings.value
-                updateUserSettings(
-                    currentSettings.copy(
-                        userId = uid,
-                        tenantName = name,
-                        email = email,
-                        defaultCurrency = currency
-                    )
-                )
-            } else {
-                val err = result.exceptionOrNull()?.message ?: "Account creation failed"
-                if (err.contains("not enabled in Firebase Console", ignoreCase = true) ||
-                    err.contains("Network connection error", ignoreCase = true)) {
-                    val uid = "local_" + java.util.UUID.randomUUID().toString().take(8)
-                    _uiState.value = _uiState.value.copy(
-                        isAuthenticated = true,
-                        authLoading = false,
-                        currentUserId = uid,
-                        currentUserEmail = email,
-                        currentUserName = name,
-                        infoMessage = "Account created locally! (Enable Email/Password in Firebase Console to cloud sync)"
-                    )
-                    val currentSettings = userSettings.value
-                    updateUserSettings(
-                        currentSettings.copy(
-                            userId = uid,
-                            tenantName = name,
-                            email = email,
-                            defaultCurrency = currency
-                        )
-                    )
-                } else {
-                    _uiState.value = _uiState.value.copy(
-                        authLoading = false,
-                        authError = err
-                    )
+            if (newPass.length < 6) {
+                onComplete(false, "Password must be at least 6 characters.")
+                return@launch
+            }
+
+            val canonicalUserId = AuthUtils.emailToUserId(cleanEmail)
+            val passHash = AuthUtils.hashPassword(newPass)
+
+            var verified = false
+
+            // 1. Check in-memory code
+            val memCode = activeResetCodes[cleanEmail]
+            if (memCode != null) {
+                if (System.currentTimeMillis() > memCode.second) {
+                    onComplete(false, "Verification code has expired. Please request a new code.")
+                    return@launch
+                }
+                if (memCode.first == cleanCode) {
+                    verified = true
                 }
             }
-        }
-    }
 
-    fun signInWithAccount(email: String, pass: String) {
-        viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(authLoading = true, authError = null)
-            val result = authManager.signIn(email, pass)
-            if (result.isSuccess) {
-                val user = result.getOrNull()
-                val uid = user?.uid ?: ""
-                val name = user?.displayName ?: "Tenant"
-                _uiState.value = _uiState.value.copy(
-                    isAuthenticated = true,
-                    authLoading = false,
-                    currentUserId = uid,
-                    currentUserEmail = email,
-                    currentUserName = name,
-                    infoMessage = "Signed in as $email"
-                )
-                val currentSettings = userSettings.value
-                updateUserSettings(currentSettings.copy(userId = uid, email = email, tenantName = name))
-            } else {
-                val err = result.exceptionOrNull()?.message ?: "Invalid email or password"
-                val currentSettings = userSettings.value
-                if (currentSettings.email.equals(email.trim(), ignoreCase = true) && currentSettings.userId.isNotBlank()) {
-                    _uiState.value = _uiState.value.copy(
-                        isAuthenticated = true,
-                        authLoading = false,
-                        currentUserId = currentSettings.userId,
-                        currentUserEmail = currentSettings.email,
-                        currentUserName = currentSettings.tenantName,
-                        infoMessage = "Signed in with local profile: $email"
-                    )
+            // 2. Check Cloud Firestore if not verified in memory
+            if (!verified) {
+                val cloudRes = repository.verifyAndResetPassword(cleanEmail, cleanCode, newPass)
+                if (cloudRes.isSuccess) {
+                    verified = true
                 } else {
-                    _uiState.value = _uiState.value.copy(
-                        authLoading = false,
-                        authError = err
-                    )
+                    val err = cloudRes.exceptionOrNull()?.message ?: "Invalid verification code."
+                    onComplete(false, err)
+                    return@launch
                 }
+            }
+
+            if (verified) {
+                // Permanently update Firestore and delete previous password & reset code
+                repository.updatePasswordAndClearResetCode(cleanEmail, newPass)
+
+                // Permanently update Room local DB, replacing and deleting previous password
+                val existingLocal = repository.getUserAccountSync(canonicalUserId)
+                val updatedAcc = UserAccountEntity(
+                    id = canonicalUserId,
+                    email = cleanEmail,
+                    passwordHash = passHash,
+                    createdAt = existingLocal?.createdAt ?: System.currentTimeMillis()
+                )
+
+                repository.saveUserAccount(updatedAcc)
+                activeResetCodes.remove(cleanEmail)
+
+                try {
+                    authManager.changePassword(newPass)
+                } catch (_: Exception) {}
+
+                // Invalidate any active session so previous login cannot linger
+                authManager.signOut()
+                activeUserId.value = ""
+
+                val successMsg = "Password reset successfully! Your previous password has been deleted. Please log in with your new password."
+                _uiState.value = _uiState.value.copy(
+                    isAuthenticated = false,
+                    infoMessage = successMsg
+                )
+                onComplete(true, successMsg)
             }
         }
     }
 
     fun signOut() {
         authManager.signOut()
-        _uiState.value = _uiState.value.copy(
-            isAuthenticated = false,
-            currentUserId = "",
-            currentUserEmail = "",
-            currentUserName = "",
-            infoMessage = "Signed out successfully."
-        )
-    }
-
-    fun continueAsGuest() {
-        _uiState.value = _uiState.value.copy(
-            isAuthenticated = true,
-            currentUserId = "guest_user",
-            currentUserName = "Guest Tenant",
-            currentUserEmail = "guest@renttracker.local",
-            infoMessage = "Running in Guest / Offline Mode"
-        )
-    }
-
-    fun sendPasswordReset(email: String) {
-        viewModelScope.launch {
-            authManager.sendPasswordReset(email)
-            _uiState.value = _uiState.value.copy(infoMessage = "Password reset email sent to $email")
-        }
+        activeUserId.value = ""
+        _uiState.value = MyRentTrackerUiState(isAuthenticated = false)
     }
 
     fun clearInfoMessage() {
         _uiState.value = _uiState.value.copy(infoMessage = null)
+    }
+
+    fun clearAuthError() {
+        _uiState.value = _uiState.value.copy(authError = null)
     }
 }

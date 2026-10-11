@@ -1,20 +1,29 @@
 package com.example.ui.navigation
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Apartment
-import androidx.compose.material.icons.filled.Assessment
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.ReceiptLong
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -26,47 +35,37 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.example.data.local.entity.PropertyEntity
 import com.example.ui.RentTrackerViewModel
-import com.example.ui.components.AddPaymentDialog
-import com.example.ui.components.PaymentReceiptDialog
-import com.example.ui.components.PinLockScreen
+import com.example.ui.screens.AccountScreen
 import com.example.ui.screens.AuthScreen
-import com.example.ui.screens.DashboardScreen
 import com.example.ui.screens.HistoryScreen
-import com.example.ui.screens.NotificationsScreen
-import com.example.ui.screens.PropertiesScreen
-import com.example.ui.screens.ReportsScreen
-import com.example.ui.screens.SettingsScreen
+import com.example.ui.screens.HomeScreen
+import com.example.ui.theme.*
 
 enum class Screen(val title: String, val icon: ImageVector) {
     HOME("Home", Icons.Default.Home),
-    HISTORY("History", Icons.Default.ReceiptLong),
-    PROPERTIES("Properties", Icons.Default.Apartment),
-    REPORTS("Reports", Icons.Default.Assessment),
-    SETTINGS("Settings", Icons.Default.Settings),
-    NOTIFICATIONS("Notifications", Icons.Default.Home)
+    HISTORY("Rent History", Icons.Default.ReceiptLong),
+    ACCOUNT("Account", Icons.Default.Person)
 }
 
 @Composable
 fun RentTrackerApp(viewModel: RentTrackerViewModel) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    val properties by viewModel.properties.collectAsStateWithLifecycle()
-    val rentMonths by viewModel.rentMonths.collectAsStateWithLifecycle()
-    val payments by viewModel.payments.collectAsStateWithLifecycle()
-    val notifications by viewModel.notifications.collectAsStateWithLifecycle()
-    val unreadNotifications by viewModel.unreadNotificationsCount.collectAsStateWithLifecycle()
-    val auditLogs by viewModel.auditLogs.collectAsStateWithLifecycle()
-    val userSettings by viewModel.userSettings.collectAsStateWithLifecycle()
-    val dashboardSummary by viewModel.dashboardSummary.collectAsStateWithLifecycle()
+    val chronologicalRecords by viewModel.chronologicalRecords.collectAsStateWithLifecycle()
+    val currentRecord by viewModel.currentMonthRecord.collectAsStateWithLifecycle()
 
     var currentScreen by remember { mutableStateOf(Screen.HOME) }
-    var previousScreen by remember { mutableStateOf(Screen.HOME) }
-
     val snackbarHostState = remember { SnackbarHostState() }
 
     LaunchedEffect(uiState.infoMessage) {
@@ -76,54 +75,63 @@ fun RentTrackerApp(viewModel: RentTrackerViewModel) {
         }
     }
 
-    // If not authenticated, prompt user to sign in or create an account
+    LaunchedEffect(uiState.authError) {
+        uiState.authError?.let { err ->
+            snackbarHostState.showSnackbar(err)
+            viewModel.clearAuthError()
+        }
+    }
+
+    // 1. If not authenticated, show AuthScreen (Login / Sign Up)
     if (!uiState.isAuthenticated) {
         AuthScreen(
             isLoading = uiState.authLoading,
             errorMessage = uiState.authError,
-            onSignIn = { email, pass -> viewModel.signInWithAccount(email, pass) },
-            onSignUp = { name, email, pass, curr -> viewModel.signUpWithAccount(name, email, pass, curr) },
-            onSendResetPassword = { email -> viewModel.sendPasswordReset(email) },
-            onContinueGuest = { viewModel.continueAsGuest() }
-        )
-        return
-    }
-
-    // If PIN lock is active, render PinLockScreen exclusively
-    if (uiState.isAppLocked) {
-        PinLockScreen(
-            errorMessage = uiState.pinError,
-            onPinComplete = { pin ->
-                viewModel.unlockWithPin(pin)
+            infoMessage = uiState.infoMessage,
+            onSignIn = { email, pass -> viewModel.signIn(email, pass) },
+            onSignUp = { email, pass -> viewModel.signUp(email, pass) },
+            onRequestResetCode = { email, onResult ->
+                viewModel.requestPasswordResetCode(email, onResult)
+            },
+            onResetPassword = { email, code, newPass, onResult ->
+                viewModel.verifyCodeAndResetPassword(email, code, newPass, onResult)
             }
         )
         return
     }
 
-    // Secondary screen back handler
+    // 2. Main App with Bottom Navigation (Home, Rent History, Account)
     BackHandler(enabled = currentScreen != Screen.HOME) {
-        currentScreen = if (currentScreen == Screen.NOTIFICATIONS) previousScreen else Screen.HOME
+        currentScreen = Screen.HOME
     }
 
     Scaffold(
+        modifier = Modifier.fillMaxSize(),
         containerColor = MaterialTheme.colorScheme.background,
         snackbarHost = { SnackbarHost(snackbarHostState) },
         bottomBar = {
-            if (currentScreen != Screen.NOTIFICATIONS) {
+            Box(
+                modifier = Modifier
+                    .navigationBarsPadding()
+                    .padding(horizontal = 14.dp, vertical = 8.dp)
+                    .drawBehind {
+                        // 3D bottom extrusion shadow
+                        drawRoundRect(
+                            color = NavyDarkest,
+                            topLeft = Offset(0f, 4.dp.toPx()),
+                            size = Size(size.width, size.height),
+                            cornerRadius = CornerRadius(22.dp.toPx(), 22.dp.toPx())
+                        )
+                    }
+                    .clip(RoundedCornerShape(22.dp))
+                    .border(1.8.dp, NavyBorder, RoundedCornerShape(22.dp))
+            ) {
                 NavigationBar(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    modifier = Modifier
-                        .navigationBarsPadding()
-                        .testTag("main_bottom_nav")
+                    containerColor = NavyPrimary,
+                    tonalElevation = 0.dp,
+                    modifier = Modifier.testTag("main_bottom_nav")
                 ) {
-                    val navItems = listOf(
-                        Screen.HOME,
-                        Screen.HISTORY,
-                        Screen.PROPERTIES,
-                        Screen.REPORTS,
-                        Screen.SETTINGS
-                    )
-                    navItems.forEach { screen ->
+                    Screen.values().forEach { screen ->
                         val isSelected = currentScreen == screen
                         NavigationBarItem(
                             selected = isSelected,
@@ -134,7 +142,20 @@ fun RentTrackerApp(viewModel: RentTrackerViewModel) {
                                     contentDescription = screen.title
                                 )
                             },
-                            label = { Text(screen.title, fontSize = 11.sp) },
+                            label = {
+                                Text(
+                                    text = screen.title,
+                                    fontSize = 12.sp,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                                )
+                            },
+                            colors = NavigationBarItemDefaults.colors(
+                                selectedIconColor = NavyPrimary,
+                                selectedTextColor = YellowAccent,
+                                indicatorColor = YellowAccent,
+                                unselectedIconColor = androidx.compose.ui.graphics.Color(0xFF94A3B8),
+                                unselectedTextColor = androidx.compose.ui.graphics.Color(0xFF94A3B8)
+                            ),
                             modifier = Modifier.testTag("nav_item_${screen.name.lowercase()}")
                         )
                     }
@@ -147,123 +168,55 @@ fun RentTrackerApp(viewModel: RentTrackerViewModel) {
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
-            when (currentScreen) {
-                Screen.HOME -> {
-                    DashboardScreen(
-                        summary = dashboardSummary,
-                        properties = properties,
-                        userSettings = userSettings,
-                        unreadNotifications = unreadNotifications,
-                        onNavigateToNotifications = {
-                            previousScreen = Screen.HOME
-                            currentScreen = Screen.NOTIFICATIONS
-                        },
-                        onNavigateToProperties = { currentScreen = Screen.PROPERTIES },
-                        onNavigateToHistory = { currentScreen = Screen.HISTORY },
-                        onNavigateToReports = { currentScreen = Screen.REPORTS },
-                        onOpenAddPayment = { rentMonth -> viewModel.openPaymentDialog(rentMonth) },
-                        onOpenAddProperty = { currentScreen = Screen.PROPERTIES },
-                        onSeedDemoData = { viewModel.seedDemoData() }
-                    )
-                }
+            AnimatedContent(
+                targetState = currentScreen,
+                transitionSpec = {
+                    (fadeIn(animationSpec = tween(280, easing = CubicBezierEasing(0.2f, 0.0f, 0f, 1f))) +
+                            scaleIn(
+                                initialScale = 0.94f,
+                                animationSpec = tween(300, easing = CubicBezierEasing(0.34f, 1.56f, 0.64f, 1f))
+                            )) togetherWith
+                            (fadeOut(animationSpec = tween(200)) +
+                                    scaleOut(targetScale = 0.96f, animationSpec = tween(200)))
+                },
+                label = "3d_screen_transition"
+            ) { targetScreen ->
+                when (targetScreen) {
+                    Screen.HOME -> {
+                        HomeScreen(
+                            currentMonthRecord = currentRecord,
+                            allRecords = chronologicalRecords,
+                            userEmail = uiState.currentUserEmail,
+                            onAddRecord = { year, month, amount, date, comment, status ->
+                                viewModel.addRentRecord(year, month, amount, date, comment, status)
+                            },
+                            onNavigateToHistory = {
+                                currentScreen = Screen.HISTORY
+                            }
+                        )
+                    }
 
-                Screen.PROPERTIES -> {
-                    PropertiesScreen(
-                        properties = properties,
-                        onAddProperty = { newProp, charges -> viewModel.addProperty(newProp, charges) },
-                        onArchiveProperty = { id -> viewModel.archiveProperty(id) },
-                        onDeleteProperty = { id -> viewModel.deleteProperty(id) },
-                        onGenerateMonth = { id -> viewModel.generateCurrentMonthForProperty(id) }
-                    )
-                }
+                    Screen.HISTORY -> {
+                        HistoryScreen(
+                            records = chronologicalRecords,
+                            userEmail = uiState.currentUserEmail,
+                            onDeleteRecord = { monthKey ->
+                                viewModel.deleteRentRecord(monthKey)
+                            }
+                        )
+                    }
 
-                Screen.HISTORY -> {
-                    HistoryScreen(
-                        rentMonths = rentMonths,
-                        properties = properties,
-                        payments = payments,
-                        searchQuery = uiState.searchQuery,
-                        onSearchQueryChange = { viewModel.setSearchQuery(it) },
-                        statusFilter = uiState.filterStatus,
-                        onStatusFilterChange = { viewModel.setFilterStatus(it) },
-                        selectedPropertyId = uiState.filterPropertyId,
-                        onPropertyFilterChange = { viewModel.setFilterPropertyId(it) },
-                        onOpenAddPayment = { rentMonth -> viewModel.openPaymentDialog(rentMonth) },
-                        onViewReceipt = { pay -> viewModel.viewReceipt(pay) },
-                        onDeletePayment = { pay -> viewModel.deletePayment(pay) }
-                    )
-                }
-
-                Screen.REPORTS -> {
-                    ReportsScreen(
-                        rentMonths = rentMonths,
-                        properties = properties,
-                        payments = payments,
-                        defaultCurrency = userSettings.defaultCurrency
-                    )
-                }
-
-                Screen.SETTINGS -> {
-                    SettingsScreen(
-                        userSettings = userSettings,
-                        auditLogs = auditLogs,
-                        currentUserEmail = uiState.currentUserEmail,
-                        isSyncing = uiState.isSyncing,
-                        lastSyncTime = uiState.lastSyncTime,
-                        onSyncWithFirebase = { viewModel.syncWithFirebase() },
-                        onSignOut = { viewModel.signOut() },
-                        onUpdateSettings = { viewModel.updateUserSettings(it) },
-                        onLockApp = { viewModel.lockApp() },
-                        onSeedDemoData = { viewModel.seedDemoData() },
-                        onClearAllData = { viewModel.clearAllData() }
-                    )
-                }
-
-                Screen.NOTIFICATIONS -> {
-                    NotificationsScreen(
-                        notifications = notifications,
-                        onMarkAsRead = { id -> viewModel.markNotificationAsRead(id) },
-                        onMarkAllAsRead = { viewModel.markAllNotificationsAsRead() },
-                        onClearAll = { viewModel.clearAllNotifications() }
-                    )
+                    Screen.ACCOUNT -> {
+                        AccountScreen(
+                            email = uiState.currentUserEmail,
+                            accountCreatedAt = uiState.accountCreatedAt,
+                            onSignOut = {
+                                viewModel.signOut()
+                            }
+                        )
+                    }
                 }
             }
         }
-    }
-
-    // Modal: Record Rent Payment Dialog
-    if (uiState.paymentDialogMonth != null) {
-        val month = uiState.paymentDialogMonth!!
-        val prop = properties.find { it.id == month.propertyId }
-        AddPaymentDialog(
-            rentMonth = month,
-            property = prop,
-            onDismiss = { viewModel.closePaymentDialog() },
-            onSavePayment = { amount, paidDate, method, reference, note ->
-                viewModel.recordPayment(
-                    propertyId = month.propertyId,
-                    rentMonthId = month.id,
-                    amount = amount,
-                    paidDate = paidDate,
-                    method = method,
-                    reference = reference,
-                    note = note
-                )
-            }
-        )
-    }
-
-    // Modal: Digital Payment Receipt Dialog
-    if (uiState.receiptViewingPayment != null) {
-        val pay = uiState.receiptViewingPayment!!
-        val month = rentMonths.find { it.id == pay.rentMonthId }
-        val prop = properties.find { it.id == pay.propertyId }
-        PaymentReceiptDialog(
-            payment = pay,
-            rentMonth = month,
-            property = prop,
-            tenantName = userSettings.tenantName,
-            onDismiss = { viewModel.closeReceiptView() }
-        )
     }
 }

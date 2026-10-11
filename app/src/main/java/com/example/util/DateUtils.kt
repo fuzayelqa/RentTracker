@@ -7,19 +7,17 @@ import java.util.Locale
 
 object DateUtils {
 
-    private val englishMonths = listOf(
+    const val START_YEAR = 2026
+    const val START_MONTH = 7 // July 2026
+
+    private val monthNames = listOf(
         "January", "February", "March", "April", "May", "June",
         "July", "August", "September", "October", "November", "December"
     )
 
-    private val banglaMonths = listOf(
-        "জানুয়ারি", "ফেব্রুয়ারি", "মার্চ", "এপ্রিল", "মে", "জুন",
-        "জুলাই", "আগস্ট", "সেপ্টেম্বর", "অক্টোবর", "নভেম্বর", "ডিসেম্বর"
-    )
-
-    fun getMonthName(month: Int, isBangla: Boolean = false): String {
+    fun getMonthName(month: Int): String {
         val index = (month - 1).coerceIn(0, 11)
-        return if (isBangla) banglaMonths[index] else englishMonths[index]
+        return monthNames[index]
     }
 
     fun getCurrentYear(): Int {
@@ -34,88 +32,126 @@ object DateUtils {
         return Calendar.getInstance().get(Calendar.DAY_OF_MONTH)
     }
 
-    fun getCurrentDateString(): String {
-        val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US)
-        return sdf.format(Date())
+    /**
+     * Formats monthKey as YYYY-MM (e.g. "2026-07", "2026-10")
+     */
+    fun formatMonthKey(year: Int, month: Int): String {
+        return String.format(Locale.US, "%04d-%02d", year, month)
     }
 
-    fun formatDisplayDate(dateStr: String): String {
-        return try {
-            val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US)
-            val parsed = sdf.parse(dateStr) ?: return dateStr
-            val out = SimpleDateFormat("dd MMM yyyy", Locale.US)
-            out.format(parsed)
-        } catch (_: Exception) {
-            dateStr
+    /**
+     * Formats Month and Year (e.g. "July 2026", "October 2026")
+     */
+    fun formatMonthYear(year: Int, month: Int): String {
+        return "${getMonthName(month)} $year"
+    }
+
+    /**
+     * Formats payment date as "01 July 2026"
+     */
+    fun formatPaymentDate(day: Int, month: Int, year: Int): String {
+        return String.format(Locale.US, "%02d %s %d", day, getMonthName(month), year)
+    }
+
+    /**
+     * Current formatted date: e.g. "06 October 2026"
+     */
+    fun getCurrentDateFormatted(): String {
+        return formatPaymentDate(getCurrentDay(), getCurrentMonth(), getCurrentYear())
+    }
+
+    /**
+     * Formats creation timestamp to readable date: e.g. "06 October 2026"
+     */
+    fun formatTimestamp(timestamp: Long): String {
+        val sdf = SimpleDateFormat("dd MMMM yyyy, hh:mm a", Locale.US)
+        return sdf.format(Date(timestamp))
+    }
+
+    /**
+     * Returns all chronological (year, month) pairs starting from July 2026 up to current month.
+     * RULE: Advance months that have not come yet will not be added.
+     * Once a calendar month arrives, that month becomes available in the chronological list.
+     */
+    fun getChronologicalMonthsFromJuly2026(upToYear: Int? = null, upToMonth: Int? = null): List<Pair<Int, Int>> {
+        val list = mutableListOf<Pair<Int, Int>>()
+        var curY = START_YEAR
+        var curM = START_MONTH
+
+        val curYear = getCurrentYear()
+        val curMonth = getCurrentMonth()
+
+        val targetYear = upToYear ?: maxOf(curYear, START_YEAR)
+        val targetMonth = upToMonth ?: if (curYear < START_YEAR || (curYear == START_YEAR && curMonth < START_MONTH)) {
+            START_MONTH // Minimum baseline is July 2026
+        } else if (targetYear == curYear) {
+            curMonth // Do not add future months that have not come yet
+        } else {
+            12
         }
+
+        while (curY < targetYear || (curY == targetYear && curM <= targetMonth)) {
+            list.add(Pair(curY, curM))
+            curM++
+            if (curM > 12) {
+                curM = 1
+                curY++
+            }
+        }
+        if (list.isEmpty()) {
+            list.add(Pair(START_YEAR, START_MONTH))
+        }
+        return list
     }
 
     /**
-     * Calculates the due date string (yyyy-MM-dd) handling varying month lengths
-     * (e.g. Feb 28/29, Apr 30, Jan 31).
+     * Checks if a month has not arrived yet (future month).
+     * If the month has not come yet, it cannot be added until the month arrives.
      */
-    fun calculateDueDate(year: Int, month: Int, dueDay: Int): String {
-        val cal = Calendar.getInstance()
-        cal.set(Calendar.YEAR, year)
-        cal.set(Calendar.MONTH, month - 1)
-        val maxDays = cal.getActualMaximum(Calendar.DAY_OF_MONTH)
-        val validDay = dueDay.coerceIn(1, maxDays)
-        cal.set(Calendar.DAY_OF_MONTH, validDay)
-        val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US)
-        return sdf.format(cal.time)
-    }
-
-    /**
-     * Returns true if today is strictly after the given due date string.
-     */
-    fun isOverdue(dueDateStr: String): Boolean {
-        return try {
-            val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US)
-            val due = sdf.parse(dueDateStr) ?: return false
-            val todayStr = sdf.format(Date())
-            val today = sdf.parse(todayStr) ?: return false
-            today.after(due)
-        } catch (_: Exception) {
+    fun isMonthNotComeYet(year: Int, month: Int): Boolean {
+        val curYear = getCurrentYear()
+        val curMonth = getCurrentMonth()
+        // If current calendar time is before July 2026, July 2026 is always allowed as baseline
+        if (year < START_YEAR || (year == START_YEAR && month <= START_MONTH)) {
+            return false
+        }
+        return if (year > curYear) {
+            true
+        } else if (year == curYear) {
+            month > curMonth
+        } else {
             false
         }
     }
 
     /**
-     * Computes the number of days remaining until dueDate, or negative if overdue.
+     * Checks if a month is before the earliest tracking start date (July 2026).
+     * Users can start from July 2026 or any later month (August, November, December, 2027, etc.).
      */
-    fun getDaysUntilDue(dueDateStr: String): Int {
-        return try {
-            val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US)
-            val due = sdf.parse(dueDateStr) ?: return 0
-            val todayStr = sdf.format(Date())
-            val today = sdf.parse(todayStr) ?: return 0
-            val diffMs = due.time - today.time
-            (diffMs / (1000 * 60 * 60 * 24)).toInt()
-        } catch (_: Exception) {
-            0
-        }
+    fun isBeforeStartMonth(year: Int, month: Int): Boolean {
+        return year < START_YEAR || (year == START_YEAR && month < START_MONTH)
     }
 
     /**
-     * Calculates payment status according to exact business rules:
-     * - totalPaid == 0 -> if overdue: OVERDUE else UNPAID
-     * - 0 < totalPaid < totalDue -> if overdue: OVERDUE else PARTIALLY_PAID
-     * - totalPaid == totalDue -> PAID
-     * - totalPaid > totalDue -> OVERPAID
+     * Checks if this is the initial default start month (July 2026).
      */
-    fun computeRentStatus(totalDue: Double, totalPaid: Double, dueDateStr: String): String {
-        val overdue = isOverdue(dueDateStr)
-        return when {
-            totalPaid >= totalDue && totalDue > 0 -> {
-                if (totalPaid > totalDue) "OVERPAID" else "PAID"
-            }
-            totalPaid <= 0.0 -> {
-                if (overdue) "OVERDUE" else "UNPAID"
-            }
-            totalPaid < totalDue -> {
-                if (overdue) "OVERDUE" else "PARTIALLY_PAID"
-            }
-            else -> "PAID"
+    fun isStartMonth(year: Int, month: Int): Boolean {
+        return year == START_YEAR && month == START_MONTH
+    }
+
+    /**
+     * Checks if a given month/year is in a past month compared to current month/year.
+     * RULE: If a record was updated/created in a past month, after that month ends the user cannot update or delete it.
+     */
+    fun isRecordInPastMonth(recordYear: Int, recordMonth: Int): Boolean {
+        val curYear = getCurrentYear()
+        val curMonth = getCurrentMonth()
+        return if (recordYear < curYear) {
+            true
+        } else if (recordYear == curYear) {
+            recordMonth < curMonth
+        } else {
+            false
         }
     }
 }

@@ -1,128 +1,52 @@
 package com.example.data.local.entity
 
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
-import java.util.UUID
 
-@Entity(tableName = "properties")
-data class PropertyEntity(
-    @PrimaryKey val id: String = UUID.randomUUID().toString(),
-    val userId: String = "",
-    val name: String,
-    val address: String,
-    val city: String,
-    val country: String = "Bangladesh",
-    val propertyType: String = "Apartment", // Apartment, House, Room, Office, Other
-    val landlordName: String = "",
-    val landlordPhone: String = "",
-    val landlordEmail: String = "",
-    val landlordAddress: String = "",
-    val landlordNotes: String = "",
-    val monthlyRent: Double = 0.0,
-    val currency: String = "BDT", // BDT, USD, EUR, GBP, INR
-    val dueDay: Int = 5, // 1 to 31
-    val tenancyStart: String = "", // YYYY-MM-DD
-    val tenancyEnd: String = "",
-    val securityDeposit: Double = 0.0,
-    val advancePayment: Double = 0.0,
-    val rentIncreaseDate: String = "",
-    val futureRentAmount: Double = 0.0,
-    val status: String = "Active", // Active, Vacated, Archived
+/**
+ * Account entity for the logged-in user.
+ * Section "ACCOUNT": User can create only one personal account, logged in via email.
+ */
+@Entity(tableName = "user_accounts")
+data class UserAccountEntity(
+    @PrimaryKey val id: String = "default_user",
+    val email: String = "",
+    val passwordHash: String = "",
+    val createdAt: Long = System.currentTimeMillis()
+)
+
+/**
+ * Rent Record entity.
+ * Section "DATA MODEL":
+ * - id
+ * - userId
+ * - month
+ * - year
+ * - rentAmount
+ * - paymentDate
+ * - status (Advance Rent / Paid / Pending)
+ * - isLocked (Permanently locked once saved)
+ * - createdAt
+ *
+ * RULE: Each user can have only ONE rent record per month (enforced via unique index).
+ */
+@Entity(
+    tableName = "rent_records",
+    indices = [Index(value = ["userId", "monthKey"], unique = true)]
+)
+data class RentRecordEntity(
+    @PrimaryKey val id: String, // Format: "${userId}_${monthKey}" - strictly unique
+    val userId: String,
+    val month: Int, // 1..12 (Starts from 7 for July 2026)
+    val year: Int, // 2026 onwards
+    val monthKey: String, // e.g. "2026-07", "2026-10"
+    val rentAmount: Double,
+    val currency: String = "৳",
+    val paymentDate: String = "", // e.g. "01 July 2026"
+    val comment: String = "", // Optional comment/note after payment date
+    val status: String = "Paid", // "Advance Rent", "Paid", "Pending"
+    val isLocked: Boolean = true, // IMPORTANT: Once saved, permanently locked!
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis()
-)
-
-@Entity(tableName = "recurring_charges")
-data class RecurringChargeEntity(
-    @PrimaryKey val id: String = UUID.randomUUID().toString(),
-    val propertyId: String,
-    val name: String, // Service Charge, Gas, Water, Electricity, Internet, Security, Parking
-    val amount: Double = 0.0,
-    val type: String = "Fixed", // Fixed, Variable
-    val isActive: Boolean = true,
-    val createdAt: Long = System.currentTimeMillis()
-)
-
-@Entity(tableName = "rent_months")
-data class RentMonthEntity(
-    @PrimaryKey val id: String = UUID.randomUUID().toString(),
-    val userId: String = "",
-    val propertyId: String,
-    val year: Int,
-    val month: Int, // 1 to 12
-    val rentAmount: Double = 0.0,
-    val extras: Double = 0.0,
-    val lateFee: Double = 0.0,
-    val previousBalance: Double = 0.0,
-    val discount: Double = 0.0,
-    val totalDue: Double = 0.0,
-    val totalPaid: Double = 0.0,
-    val balance: Double = 0.0,
-    val dueDate: String = "", // YYYY-MM-DD
-    val status: String = "UNPAID", // UNPAID, PARTIALLY_PAID, PAID, OVERDUE, OVERPAID
-    val notes: String = "",
-    val createdAt: Long = System.currentTimeMillis(),
-    val updatedAt: Long = System.currentTimeMillis()
-)
-
-@Entity(tableName = "payments")
-data class PaymentEntity(
-    @PrimaryKey val id: String = UUID.randomUUID().toString(),
-    val userId: String = "",
-    val propertyId: String,
-    val rentMonthId: String,
-    val receiptNumber: String = "",
-    val amount: Double = 0.0,
-    val paidDate: String = "", // YYYY-MM-DD
-    val method: String = "Cash", // Cash, bKash, Nagad, Bank Transfer, Cheque, Card, Other
-    val reference: String = "",
-    val receiptUri: String = "",
-    val note: String = "",
-    val createdAt: Long = System.currentTimeMillis()
-)
-
-@Entity(tableName = "notifications")
-data class AppNotificationEntity(
-    @PrimaryKey val id: String = UUID.randomUUID().toString(),
-    val userId: String = "",
-    val type: String, // DUE_REMINDER, OVERDUE, PAYMENT_CONFIRMED, LEASE_EXPIRING, SYSTEM
-    val title: String,
-    val message: String,
-    val relatedPropertyId: String? = null,
-    val relatedRentMonthId: String? = null,
-    val isRead: Boolean = false,
-    val createdAt: Long = System.currentTimeMillis()
-)
-
-@Entity(tableName = "audit_logs")
-data class AuditLogEntity(
-    @PrimaryKey val id: String = UUID.randomUUID().toString(),
-    val userId: String = "",
-    val action: String, // CREATE_PAYMENT, UPDATE_PAYMENT, DELETE_PAYMENT, CREATE_PROPERTY, UPDATE_PROPERTY, ARCHIVE_PROPERTY, RENT_CHANGED
-    val entityType: String, // Property, Payment, RentMonth
-    val entityId: String,
-    val description: String,
-    val previousValue: String = "",
-    val newValue: String = "",
-    val timestamp: Long = System.currentTimeMillis()
-)
-
-@Entity(tableName = "user_settings")
-data class UserSettingsEntity(
-    @PrimaryKey val id: Int = 1,
-    val userId: String = "",
-    val tenantName: String = "Tenant",
-    val email: String = "user@renttracker.app",
-    val phone: String = "",
-    val defaultCurrency: String = "BDT",
-    val language: String = "EN", // EN or BN
-    val pinEnabled: Boolean = false,
-    val pinCode: String = "", // 4-digit PIN
-    val sessionTimeoutMinutes: Int = 15,
-    val reminderSevenDays: Boolean = true,
-    val reminderThreeDays: Boolean = true,
-    val reminderDueDay: Boolean = true,
-    val reminderOverdue: Boolean = true,
-    val reminderLease: Boolean = true,
-    val paymentConfirmation: Boolean = true
 )

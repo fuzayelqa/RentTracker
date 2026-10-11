@@ -1,12 +1,14 @@
 package com.example.ui.screens
 
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -22,23 +24,26 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Email
-import androidx.compose.material.icons.filled.HomeWork
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
@@ -53,7 +58,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -62,33 +67,42 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
-import com.example.util.CurrencyUtils
+import com.example.ui.components.Animated3DSection
+import com.example.ui.components.Button3D
+import com.example.ui.components.Card3D
+import com.example.ui.theme.*
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun AuthScreen(
     isLoading: Boolean,
     errorMessage: String?,
+    infoMessage: String? = null,
     onSignIn: (email: String, pass: String) -> Unit,
-    onSignUp: (name: String, email: String, pass: String, currency: String) -> Unit,
-    onSendResetPassword: (email: String) -> Unit,
-    onContinueGuest: () -> Unit,
+    onSignUp: (email: String, pass: String) -> Unit,
+    onRequestResetCode: (email: String, onResult: (Boolean, String, String?) -> Unit) -> Unit = { _, _ -> },
+    onResetPassword: (email: String, code: String, newPass: String, onResult: (Boolean, String) -> Unit) -> Unit = { _, _, _, _ -> },
     modifier: Modifier = Modifier
 ) {
-    var selectedTab by remember { mutableIntStateOf(0) } // 0: Sign In, 1: Create Account
-
-    // Form inputs
-    var name by remember { mutableStateOf("") }
+    var selectedTab by remember { mutableIntStateOf(0) } // 0: Login, 1: Sign Up
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var confirmPassword by remember { mutableStateOf("") }
     var showPassword by remember { mutableStateOf(false) }
-    var selectedCurrency by remember { mutableStateOf("BDT") }
-    var localError by remember { mutableStateOf<String?>(null) }
-    var showForgotDialog by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    var validationError by remember { mutableStateOf<String?>(null) }
+    var resetSuccessBanner by remember { mutableStateOf<String?>(null) }
 
-    val currencies = listOf("BDT", "USD", "EUR", "GBP", "INR")
+    // Forgot Password Verification Code States
+    var showForgotPasswordDialog by remember { mutableStateOf(false) }
+    var forgotPasswordStep by remember { mutableIntStateOf(1) } // 1: Email, 2: Enter Code & New Pass
+    var forgotPasswordEmail by remember { mutableStateOf("") }
+    var forgotPasswordCode by remember { mutableStateOf("") }
+    var forgotPasswordNewPass by remember { mutableStateOf("") }
+    var forgotPasswordConfirmPass by remember { mutableStateOf("") }
+    var showNewPass by remember { mutableStateOf(false) }
+    var forgotPasswordMessage by remember { mutableStateOf<String?>(null) }
+    var forgotPasswordIsError by remember { mutableStateOf(false) }
+    var forgotPasswordLoading by remember { mutableStateOf(false) }
 
     Surface(
         modifier = modifier
@@ -100,366 +114,759 @@ fun AuthScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .imePadding()
-                .padding(20.dp)
+                .padding(24.dp)
                 .verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
             Spacer(modifier = Modifier.height(20.dp))
 
-            // App Brand Header
-            Box(
-                modifier = Modifier
-                    .size(68.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.primaryContainer),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Default.HomeWork,
-                    contentDescription = "RentTracker",
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(36.dp)
-                )
+            // Logo Header with Navy Blue & Yellow Identity in 3D
+            Animated3DSection(delayMillis = 0) {
+                Box(
+                    modifier = Modifier
+                        .size(80.dp)
+                        .clip(CircleShape)
+                        .background(NavyPrimary)
+                        .border(3.dp, YellowAccent, CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Home,
+                        contentDescription = "My Rent Tracker",
+                        tint = YellowAccent,
+                        modifier = Modifier.size(44.dp)
+                    )
+                }
             }
 
-            Spacer(modifier = Modifier.height(14.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
-            Text(
-                text = "RentTracker",
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.ExtraBold,
-                color = MaterialTheme.colorScheme.primary
-            )
-            Text(
-                text = "Track property rent, utility bills & payment records",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center
-            )
+            Animated3DSection(delayMillis = 50) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = "My Rent Tracker",
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Black,
+                        color = DarkNavyText
+                    )
+                    Text(
+                        text = "Simple, lightweight monthly house rent records (v2.0)",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = DarkSlateText,
+                        textAlign = TextAlign.Center
+                    )
+                }
+            }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(28.dp))
 
-            // Main Auth Card
-            Card(
-                shape = RoundedCornerShape(24.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(modifier = Modifier.padding(20.dp)) {
-                    // Tabs: Sign In / Create Account
+            // Auth Card in 3D
+            Animated3DSection(delayMillis = 100) {
+                Card3D(
+                    shape = RoundedCornerShape(20.dp),
+                    containerColor = YellowCardSurface,
+                    borderColor = NavyBorder,
+                    borderWidth = 1.8.dp,
+                    depth = 6.dp,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("auth_card")
+                ) {
+                Column(
+                    modifier = Modifier.padding(22.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
                     TabRow(
                         selectedTabIndex = selectedTab,
-                        containerColor = Color.Transparent,
-                        divider = {}
+                        containerColor = YellowCardSurface,
+                        contentColor = NavyPrimary,
+                        modifier = Modifier.clip(RoundedCornerShape(12.dp))
                     ) {
                         Tab(
                             selected = selectedTab == 0,
                             onClick = {
                                 selectedTab = 0
-                                localError = null
+                                validationError = null
                             },
-                            text = { Text("Sign In", fontWeight = FontWeight.Bold) },
-                            modifier = Modifier.testTag("tab_sign_in")
+                            text = {
+                                Text(
+                                    "Log In",
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (selectedTab == 0) SkyBluePrimary else DarkSlateText
+                                )
+                            },
+                            modifier = Modifier.testTag("auth_tab_login")
                         )
                         Tab(
                             selected = selectedTab == 1,
                             onClick = {
                                 selectedTab = 1
-                                localError = null
+                                validationError = null
                             },
-                            text = { Text("Create Account", fontWeight = FontWeight.Bold) },
-                            modifier = Modifier.testTag("tab_create_account")
+                            text = {
+                                Text(
+                                    "Create Account",
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (selectedTab == 1) SkyBluePrimary else DarkSlateText
+                                )
+                            },
+                            modifier = Modifier.testTag("auth_tab_signup")
                         )
                     }
 
-                    Spacer(modifier = Modifier.height(18.dp))
+                    Spacer(modifier = Modifier.height(20.dp))
 
-                    // Sign Up Specific: Name & Currency
-                    if (selectedTab == 1) {
-                        OutlinedTextField(
-                            value = name,
-                            onValueChange = { name = it },
-                            label = { Text("Your Full Name") },
-                            leadingIcon = { Icon(imageVector = Icons.Default.Person, contentDescription = "Name") },
+                    // Success / Info Banner (e.g. Password Reset Confirmation)
+                    val activeInfo = resetSuccessBanner ?: infoMessage
+                    AnimatedVisibility(visible = activeInfo != null) {
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = SuccessGreenBg),
+                            shape = RoundedCornerShape(12.dp),
+                            border = BorderStroke(1.5.dp, SuccessGreen),
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .testTag("auth_name_input"),
-                            singleLine = true
-                        )
-
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        Text("Default Rent Currency", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                        Spacer(modifier = Modifier.height(4.dp))
-                        FlowRow(
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                            modifier = Modifier.fillMaxWidth()
+                                .padding(bottom = 14.dp)
+                                .testTag("auth_success_banner")
                         ) {
-                            currencies.forEach { c ->
-                                FilterChip(
-                                    selected = selectedCurrency == c,
-                                    onClick = { selectedCurrency = c },
-                                    label = { Text("$c (${CurrencyUtils.getSymbol(c)})", fontSize = 12.sp) }
+                            Row(
+                                modifier = Modifier.padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.CheckCircle,
+                                    contentDescription = null,
+                                    tint = SuccessGreen,
+                                    modifier = Modifier.size(22.dp)
                                 )
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "Previous Password Deleted",
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = SuccessGreenText
+                                    )
+                                    Text(
+                                        text = activeInfo ?: "",
+                                        fontSize = 12.sp,
+                                        color = DarkNavyText,
+                                        lineHeight = 16.sp
+                                    )
+                                }
+                                IconButton(
+                                    onClick = { resetSuccessBanner = null },
+                                    modifier = Modifier.size(24.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Close,
+                                        contentDescription = "Dismiss",
+                                        tint = DarkSlateText,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
                             }
                         }
-
-                        Spacer(modifier = Modifier.height(12.dp))
                     }
 
-                    // Email Input
+                    // Email Field
+                    Text(
+                        text = "Email Address",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = DarkNavyText,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
                     OutlinedTextField(
                         value = email,
                         onValueChange = {
                             email = it
-                            localError = null
+                            validationError = null
                         },
-                        label = { Text("Email Address") },
-                        placeholder = { Text("user@example.com") },
-                        leadingIcon = { Icon(imageVector = Icons.Default.Email, contentDescription = "Email") },
+                        placeholder = { Text("your.email@example.com") },
+                        leadingIcon = { Icon(imageVector = Icons.Default.Email, contentDescription = "Email", tint = SkyBluePrimary) },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                        singleLine = true,
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag("auth_email_input"),
-                        singleLine = true
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = SkyBluePrimary,
+                            unfocusedBorderColor = SkyBlueBorder
+                        )
                     )
 
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(14.dp))
 
-                    // Password Input
+                    // Password Field
+                    Text(
+                        text = "Password",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = DarkNavyText,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
                     OutlinedTextField(
                         value = password,
                         onValueChange = {
                             password = it
-                            localError = null
+                            validationError = null
                         },
-                        label = { Text("Password") },
-                        leadingIcon = { Icon(imageVector = Icons.Default.Lock, contentDescription = "Password") },
+                        placeholder = { Text("At least 6 characters") },
+                        leadingIcon = { Icon(imageVector = Icons.Default.Lock, contentDescription = "Password", tint = SkyBluePrimary) },
                         trailingIcon = {
                             IconButton(onClick = { showPassword = !showPassword }) {
                                 Icon(
-                                    imageVector = if (showPassword) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                                    contentDescription = "Toggle password visibility"
+                                    imageVector = if (showPassword) Icons.Default.Visibility else Icons.Default.VisibilityOff,
+                                    contentDescription = if (showPassword) "Hide Password" else "Show Password",
+                                    tint = DarkSlateText
                                 )
                             }
                         },
                         visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        singleLine = true,
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag("auth_password_input"),
-                        singleLine = true
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = SkyBluePrimary,
+                            unfocusedBorderColor = SkyBlueBorder
+                        )
                     )
 
-                    // Sign Up Specific: Confirm Password
+                    // Forgot Password option (Only on Log In tab)
+                    if (selectedTab == 0) {
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Box(
+                            modifier = Modifier.fillMaxWidth(),
+                            contentAlignment = Alignment.CenterEnd
+                        ) {
+                            TextButton(
+                                onClick = {
+                                    forgotPasswordEmail = email.trim()
+                                    forgotPasswordMessage = null
+                                    forgotPasswordIsError = false
+                                    showForgotPasswordDialog = true
+                                },
+                                modifier = Modifier.testTag("auth_forgot_password_btn")
+                            ) {
+                                Text(
+                                    text = "Forgot Password?",
+                                    color = NavyPrimary,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
+
+                    // Confirm Password (Sign Up)
                     if (selectedTab == 1) {
-                        Spacer(modifier = Modifier.height(12.dp))
+                        Spacer(modifier = Modifier.height(14.dp))
+                        Text(
+                            text = "Confirm Password",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = DarkNavyText,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
                         OutlinedTextField(
                             value = confirmPassword,
                             onValueChange = {
                                 confirmPassword = it
-                                localError = null
+                                validationError = null
                             },
-                            label = { Text("Confirm Password") },
-                            leadingIcon = { Icon(imageVector = Icons.Default.Lock, contentDescription = "Confirm Password") },
+                            placeholder = { Text("Re-type your password") },
+                            leadingIcon = { Icon(imageVector = Icons.Default.Lock, contentDescription = "Confirm Password", tint = SkyBluePrimary) },
                             visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                            singleLine = true,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .testTag("auth_confirm_password_input"),
-                            singleLine = true
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = SkyBluePrimary,
+                                unfocusedBorderColor = SkyBlueBorder
+                            )
                         )
                     }
 
-                    // Forgot Password Link (for Sign In)
-                    if (selectedTab == 0) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.End
-                        ) {
-                            TextButton(
-                                onClick = { showForgotDialog = true },
-                                modifier = Modifier.testTag("auth_forgot_password_btn")
-                            ) {
-                                Text("Forgot Password?", fontSize = 12.sp)
-                            }
-                        }
-                    } else {
-                        Spacer(modifier = Modifier.height(16.dp))
-                    }
-
-                    // Display errors if any
-                    val displayError = localError ?: errorMessage
-                    AnimatedVisibility(visible = displayError != null) {
+                    // Error Message
+                    val activeError = validationError ?: errorMessage
+                    AnimatedVisibility(visible = activeError != null) {
                         Card(
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.7f)),
-                            shape = RoundedCornerShape(12.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
+                            shape = RoundedCornerShape(10.dp),
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(vertical = 6.dp)
+                                .padding(top = 12.dp)
                         ) {
-                            Column(modifier = Modifier.padding(12.dp)) {
-                                Text(
-                                    text = displayError ?: "",
-                                    color = MaterialTheme.colorScheme.onErrorContainer,
-                                    fontSize = 12.sp,
-                                    lineHeight = 16.sp
+                            Text(
+                                text = activeError ?: "",
+                                color = MaterialTheme.colorScheme.onErrorContainer,
+                                fontSize = 13.sp,
+                                modifier = Modifier.padding(12.dp)
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(20.dp))
+
+                    // Submit Button in 3D
+                    Button3D(
+                        onClick = {
+                            if (email.isBlank() || !email.contains("@")) {
+                                validationError = "Please enter a valid email address."
+                                return@Button3D
+                            }
+                            if (password.length < 6) {
+                                validationError = "Password must be at least 6 characters."
+                                return@Button3D
+                            }
+                            if (selectedTab == 1 && password != confirmPassword) {
+                                validationError = "Passwords do not match."
+                                return@Button3D
+                            }
+
+                            if (selectedTab == 0) {
+                                onSignIn(email.trim(), password)
+                            } else {
+                                onSignUp(email.trim(), password)
+                            }
+                        },
+                        backgroundColor = NavyPrimary,
+                        borderColor = NavyDarkest,
+                        depth = 5.dp,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(52.dp)
+                            .testTag("auth_submit_btn")
+                    ) {
+                        Box(
+                            modifier = Modifier.align(Alignment.Center),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (isLoading) {
+                                CircularProgressIndicator(
+                                    color = YellowAccent,
+                                    modifier = Modifier.size(24.dp),
+                                    strokeWidth = 2.5.dp
                                 )
-                                if (selectedTab == 0 && (displayError?.contains("Create Account", ignoreCase = true) == true || displayError?.contains("no account", ignoreCase = true) == true || displayError?.contains("Incorrect", ignoreCase = true) == true)) {
+                            } else {
+                                Text(
+                                    text = if (selectedTab == 0) "Log In" else "Create Account",
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = YellowAccent
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+            Spacer(modifier = Modifier.height(24.dp))
+        }
+
+        // FORGOT PASSWORD VERIFICATION CODE DIALOG
+        if (showForgotPasswordDialog) {
+            AlertDialog(
+                onDismissRequest = {
+                    showForgotPasswordDialog = false
+                    forgotPasswordLoading = false
+                },
+                icon = {
+                    Box(
+                        modifier = Modifier
+                            .size(54.dp)
+                            .clip(CircleShape)
+                            .background(NavyPrimary)
+                            .border(2.dp, YellowAccent, CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Lock,
+                            contentDescription = "Reset Password",
+                            tint = YellowAccent,
+                            modifier = Modifier.size(28.dp)
+                        )
+                    }
+                },
+                title = {
+                    Text(
+                        text = if (forgotPasswordStep == 1) "Reset Password (Step 1/2)" else "New Password (Step 2/2)",
+                        fontWeight = FontWeight.Bold,
+                        color = DarkNavyText,
+                        fontSize = 18.sp
+                    )
+                },
+                text = {
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        if (forgotPasswordStep == 1) {
+                            Text(
+                                text = "Enter your registered email address. A password reset and verification code will be sent directly to your email inbox (not shown in the app):",
+                                fontSize = 13.sp,
+                                color = DarkSlateText,
+                                lineHeight = 18.sp
+                            )
+
+                            OutlinedTextField(
+                                value = forgotPasswordEmail,
+                                onValueChange = {
+                                    forgotPasswordEmail = it
+                                    forgotPasswordMessage = null
+                                },
+                                placeholder = { Text("your.email@example.com") },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Default.Email,
+                                        contentDescription = null,
+                                        tint = NavyPrimary
+                                    )
+                                },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                                singleLine = true,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("forgot_password_email_input"),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = NavyPrimary,
+                                    unfocusedBorderColor = NavyBorder
+                                )
+                            )
+                        } else {
+                            // Step 2: Code sent through email
+                            Card(
+                                shape = RoundedCornerShape(12.dp),
+                                colors = CardDefaults.cardColors(containerColor = YellowCardSurface),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .border(1.5.dp, NavyBorder, RoundedCornerShape(12.dp))
+                            ) {
+                                Column(modifier = Modifier.padding(12.dp)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(
+                                            imageVector = Icons.Default.Email,
+                                            contentDescription = null,
+                                            tint = NavyPrimary,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(
+                                            text = "Verification Sent to Email",
+                                            fontSize = 13.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = DarkNavyText
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = "Sent to: $forgotPasswordEmail",
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = NavyPrimary
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = "Please check your email inbox (and spam folder). The code was sent through your email and is NOT shown in this app for your account security.",
+                                        fontSize = 11.sp,
+                                        color = DarkSlateText,
+                                        lineHeight = 15.sp
+                                    )
                                     Spacer(modifier = Modifier.height(8.dp))
-                                    TextButton(
+                                    OutlinedButton(
                                         onClick = {
-                                            selectedTab = 1
-                                            localError = null
+                                            try {
+                                                val emailIntent = Intent(Intent.ACTION_MAIN).apply {
+                                                    addCategory(Intent.CATEGORY_APP_EMAIL)
+                                                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                                }
+                                                context.startActivity(Intent.createChooser(emailIntent, "Open Email App"))
+                                            } catch (_: Exception) {
+                                                try {
+                                                    val mailto = Intent(Intent.ACTION_VIEW, Uri.parse("mailto:"))
+                                                    context.startActivity(mailto)
+                                                } catch (_: Exception) {}
+                                            }
                                         },
-                                        modifier = Modifier.testTag("switch_to_create_account_btn")
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(36.dp),
+                                        shape = RoundedCornerShape(8.dp),
+                                        colors = ButtonDefaults.outlinedButtonColors(contentColor = NavyPrimary)
                                     ) {
-                                        Text("New here? Tap here to Create an Account", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                        Icon(
+                                            imageVector = Icons.Default.Email,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(14.dp),
+                                            tint = NavyPrimary
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text("Open Email App", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                                     }
                                 }
                             }
+
+                            // Security Notice: Previous password deleted upon reset
+                            Card(
+                                shape = RoundedCornerShape(10.dp),
+                                colors = CardDefaults.cardColors(containerColor = AlertRedBg.copy(alpha = 0.5f)),
+                                border = BorderStroke(1.dp, AlertRed.copy(alpha = 0.6f)),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(10.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Shield,
+                                        contentDescription = null,
+                                        tint = AlertRed,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = "Security Notice: Once your password is reset, your previous password will be permanently deleted and cannot be used again.",
+                                        fontSize = 11.sp,
+                                        color = AlertRedText,
+                                        lineHeight = 15.sp,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                }
+                            }
+
+                            // 6-digit code input
+                            Text(
+                                text = "Enter 6-Digit Code from Email",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = DarkNavyText
+                            )
+                            OutlinedTextField(
+                                value = forgotPasswordCode,
+                                onValueChange = {
+                                    if (it.length <= 6 && it.all { c -> c.isDigit() }) {
+                                        forgotPasswordCode = it
+                                        forgotPasswordMessage = null
+                                    }
+                                },
+                                placeholder = { Text("Code from email") },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Default.Lock,
+                                        contentDescription = null,
+                                        tint = NavyPrimary
+                                    )
+                                },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                singleLine = true,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("forgot_password_code_input"),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = NavyPrimary,
+                                    unfocusedBorderColor = NavyBorder
+                                )
+                            )
+
+                            // New Password input
+                            Text(
+                                text = "New Password (min 6 characters)",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = DarkNavyText
+                            )
+                            OutlinedTextField(
+                                value = forgotPasswordNewPass,
+                                onValueChange = {
+                                    forgotPasswordNewPass = it
+                                    forgotPasswordMessage = null
+                                },
+                                placeholder = { Text("At least 6 characters") },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Default.Lock,
+                                        contentDescription = null,
+                                        tint = NavyPrimary
+                                    )
+                                },
+                                trailingIcon = {
+                                    IconButton(onClick = { showNewPass = !showNewPass }) {
+                                        Icon(
+                                            imageVector = if (showNewPass) Icons.Default.Visibility else Icons.Default.VisibilityOff,
+                                            contentDescription = if (showNewPass) "Hide" else "Show",
+                                            tint = DarkSlateText
+                                        )
+                                    }
+                                },
+                                visualTransformation = if (showNewPass) VisualTransformation.None else PasswordVisualTransformation(),
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                                singleLine = true,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("forgot_password_new_pass_input"),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = NavyPrimary,
+                                    unfocusedBorderColor = NavyBorder
+                                )
+                            )
+
+                            // Confirm Password
+                            Text(
+                                text = "Confirm New Password",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = DarkNavyText
+                            )
+                            OutlinedTextField(
+                                value = forgotPasswordConfirmPass,
+                                onValueChange = {
+                                    forgotPasswordConfirmPass = it
+                                    forgotPasswordMessage = null
+                                },
+                                placeholder = { Text("Re-enter new password") },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Default.Lock,
+                                        contentDescription = null,
+                                        tint = NavyPrimary
+                                    )
+                                },
+                                visualTransformation = if (showNewPass) VisualTransformation.None else PasswordVisualTransformation(),
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                                singleLine = true,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("forgot_password_confirm_pass_input"),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = NavyPrimary,
+                                    unfocusedBorderColor = NavyBorder
+                                )
+                            )
+                        }
+
+                        if (forgotPasswordMessage != null) {
+                            Text(
+                                text = forgotPasswordMessage ?: "",
+                                color = if (forgotPasswordIsError) AlertRed else SuccessGreenText,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
                         }
                     }
-
-                    Spacer(modifier = Modifier.height(10.dp))
-
-                    // Action Button (Sign In / Create Account)
+                },
+                confirmButton = {
                     Button(
                         onClick = {
-                            if (email.isBlank() || !email.contains("@")) {
-                                localError = "Please enter a valid email address"
-                                return@Button
-                            }
-                            if (password.length < 6) {
-                                localError = "Password must be at least 6 characters"
-                                return@Button
-                            }
-
-                            if (selectedTab == 1) {
-                                if (password != confirmPassword) {
-                                    localError = "Passwords do not match"
+                            if (forgotPasswordStep == 1) {
+                                if (forgotPasswordEmail.isBlank() || !forgotPasswordEmail.contains("@")) {
+                                    forgotPasswordMessage = "Please enter a valid email address."
+                                    forgotPasswordIsError = true
                                     return@Button
                                 }
-                                onSignUp(name.ifBlank { "Tenant" }, email, password, selectedCurrency)
+                                forgotPasswordLoading = true
+                                forgotPasswordMessage = null
+                                onRequestResetCode(forgotPasswordEmail.trim()) { success, msg, _ ->
+                                    forgotPasswordLoading = false
+                                    if (success) {
+                                        forgotPasswordStep = 2
+                                        forgotPasswordMessage = msg
+                                        forgotPasswordIsError = false
+                                    } else {
+                                        forgotPasswordMessage = msg
+                                        forgotPasswordIsError = true
+                                    }
+                                }
                             } else {
-                                onSignIn(email, password)
+                                // Step 2 submission
+                                if (forgotPasswordCode.trim().length != 6) {
+                                    forgotPasswordMessage = "Please enter the 6-digit verification code sent to your email."
+                                    forgotPasswordIsError = true
+                                    return@Button
+                                }
+                                if (forgotPasswordNewPass.length < 6) {
+                                    forgotPasswordMessage = "Password must be at least 6 characters."
+                                    forgotPasswordIsError = true
+                                    return@Button
+                                }
+                                if (forgotPasswordNewPass != forgotPasswordConfirmPass) {
+                                    forgotPasswordMessage = "Passwords do not match."
+                                    forgotPasswordIsError = true
+                                    return@Button
+                                }
+
+                                forgotPasswordLoading = true
+                                forgotPasswordMessage = null
+                                onResetPassword(
+                                    forgotPasswordEmail.trim(),
+                                    forgotPasswordCode.trim(),
+                                    forgotPasswordNewPass
+                                ) { success, msg ->
+                                    forgotPasswordLoading = false
+                                    if (success) {
+                                        email = forgotPasswordEmail.trim()
+                                        password = forgotPasswordNewPass
+                                        showForgotPasswordDialog = false
+                                        forgotPasswordStep = 1
+                                        forgotPasswordCode = ""
+                                        forgotPasswordNewPass = ""
+                                        forgotPasswordConfirmPass = ""
+                                        selectedTab = 0
+                                        resetSuccessBanner = "Password reset successfully! Your previous password has been deleted. You can now log in with your new password."
+                                    } else {
+                                        forgotPasswordMessage = msg
+                                        forgotPasswordIsError = true
+                                    }
+                                }
                             }
                         },
-                        enabled = !isLoading,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(50.dp)
-                            .testTag("auth_submit_btn"),
-                        shape = RoundedCornerShape(14.dp)
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = NavyPrimary,
+                            contentColor = YellowAccent
+                        ),
+                        modifier = Modifier.testTag("forgot_password_confirm_btn")
                     ) {
-                        if (isLoading) {
+                        if (forgotPasswordLoading) {
                             CircularProgressIndicator(
-                                modifier = Modifier.size(22.dp),
-                                color = MaterialTheme.colorScheme.onPrimary,
+                                color = YellowAccent,
+                                modifier = Modifier.size(18.dp),
                                 strokeWidth = 2.dp
                             )
                         } else {
                             Text(
-                                text = if (selectedTab == 0) "Sign In to RentTracker" else "Create My Account",
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 15.sp
+                                text = if (forgotPasswordStep == 1) "Send Code via Email" else "Change Password",
+                                fontWeight = FontWeight.Bold
                             )
                         }
                     }
-
-                    Spacer(modifier = Modifier.height(14.dp))
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-                    Spacer(modifier = Modifier.height(10.dp))
-
-                    // Continue as Guest Option
-                    OutlinedButton(
-                        onClick = onContinueGuest,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("auth_guest_btn"),
-                        shape = RoundedCornerShape(14.dp)
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = {
+                            if (forgotPasswordStep == 2) {
+                                forgotPasswordStep = 1
+                                forgotPasswordMessage = null
+                            } else {
+                                showForgotPasswordDialog = false
+                            }
+                        }
                     ) {
-                        Text("Continue in Offline / Guest Mode", fontSize = 13.sp)
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(24.dp))
-        }
-    }
-
-    // Forgot Password Dialog
-    if (showForgotDialog) {
-        var resetEmail by remember { mutableStateOf(email) }
-        var resetSent by remember { mutableStateOf(false) }
-
-        Dialog(onDismissRequest = { showForgotDialog = false }) {
-            Surface(
-                shape = RoundedCornerShape(20.dp),
-                color = MaterialTheme.colorScheme.surface,
-                tonalElevation = 6.dp,
-                modifier = Modifier.padding(16.dp)
-            ) {
-                Column(modifier = Modifier.padding(20.dp)) {
-                    Text(
-                        text = "Reset Password",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "Enter your email address and we'll send you a password reset link.",
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(modifier = Modifier.height(14.dp))
-
-                    OutlinedTextField(
-                        value = resetEmail,
-                        onValueChange = { resetEmail = it },
-                        label = { Text("Email Address") },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true
-                    )
-
-                    if (resetSent) {
-                        Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = "Reset link sent! Please check your inbox.",
-                            color = Color(0xFF15803D),
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Medium
+                            text = if (forgotPasswordStep == 2) "Back" else "Cancel",
+                            color = DarkSlateText,
+                            fontWeight = FontWeight.Bold
                         )
                     }
-
-                    Spacer(modifier = Modifier.height(18.dp))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        OutlinedButton(
-                            onClick = { showForgotDialog = false },
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Text("Close")
-                        }
-                        Button(
-                            onClick = {
-                                if (resetEmail.isNotBlank()) {
-                                    onSendResetPassword(resetEmail)
-                                    resetSent = true
-                                }
-                            },
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Text("Send Link")
-                        }
-                    }
                 }
-            }
+            )
         }
     }
 }

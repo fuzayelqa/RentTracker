@@ -80,6 +80,28 @@ class AuthManager {
         }
     }
 
+    suspend fun changePassword(newPassword: String): Result<Unit> {
+        return try {
+            val user = auth.currentUser ?: throw Exception("Not logged in")
+            user.updatePassword(newPassword).await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            val friendlyMsg = mapAuthExceptionToMessage(e, isSignUp = false)
+            Result.failure(Exception(friendlyMsg, e))
+        }
+    }
+
+    suspend fun deleteAccount(): Result<Unit> {
+        return try {
+            val user = auth.currentUser ?: throw Exception("Not logged in")
+            user.delete().await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            val friendlyMsg = mapAuthExceptionToMessage(e, isSignUp = false)
+            Result.failure(Exception(friendlyMsg, e))
+        }
+    }
+
     private fun mapAuthExceptionToMessage(e: Exception, isSignUp: Boolean): String {
         return when (e) {
             is FirebaseAuthInvalidCredentialsException -> {
